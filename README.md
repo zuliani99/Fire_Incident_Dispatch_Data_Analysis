@@ -16,3 +16,6 @@ Other Interesting Dataset to Propose (more interesting):
 Possible idea to invesigate:
 1. Verify whether there is some sort of relationship between the trend in the number of cycle paths in the municipality of Milan and the number of accidents involving cyclists
 2. Verify whether there is some sort of relationship between the number of sold elecric veichles and the air quality of a given city 
+
+## Kaggle Searches
+1. [CSV, highly voted for: ](https://www.kaggle.com/datasets?sort=usability&fileType=csv&feedbackIds=9)
