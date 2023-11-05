@@ -18,4 +18,4 @@ Possible idea to invesigate:
 2. Verify whether there is some sort of relationship between the number of sold elecric veichles and the air quality of a given city 
 
 ## Kaggle Searches
-1. [CSV, highly voted for: ](https://www.kaggle.com/datasets?sort=usability&fileType=csv&feedbackIds=9)
+1. [CSV, highly voted for: Research](https://www.kaggle.com/datasets?sort=usability&fileType=csv&feedbackIds=9)
