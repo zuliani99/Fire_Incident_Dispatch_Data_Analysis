@@ -11,6 +11,9 @@ Other Interesting Dataset to Propose (more interesting):
 1. [Students Performance](https://www.kaggle.com/datasets/joebeachcapital/students-performance/data)
 2. [Psycological Effects of COVID](https://www.kaggle.com/datasets/hemanthhari/psycological-effects-of-covid/data)
 3. [Heart Attack Risk Prediction Dataset](https://www.kaggle.com/datasets/iamsouravbanerjee/heart-attack-prediction-dataset/data)
+4. [Employee Satisfaction Survey Data](https://www.kaggle.com/datasets/redpen12/employees-satisfaction-analysis/)
+5. [Nepal Earthquake](https://www.kaggle.com/datasets/imtkaggleteam/nepal-earthquake)
+6. []()
    
 ## Opendata Proposes
 Possible idea to invesigate:
