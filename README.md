@@ -1,4 +1,4 @@
-# Statistical_Inference_Learning_Project
+# Statistical Inference and Learning Project
 This project has the aim to analise and study some behavoiur under a given dataset
 
 ## Kaggle Proposes
