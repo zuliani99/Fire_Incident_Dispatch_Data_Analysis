@@ -7,7 +7,7 @@ Possible Motorsport Dataset to Propose:
 2. [MotoGP Race Results](https://www.kaggle.com/datasets/amalsalilan/motogpresultdataset)
 
 Other Interesting Dataset to Propose (more interesting):
-1. [Psycological Effects of COVID](https://www.kaggle.com/datasets/hemanthhari/psycological-effects-of-covid/data)
+1. [Psycological Effects of COVID](https://www.kaggle.com/datasets/hemanthhari/psycological-effects-of-covid/data) (maybe too simple)
 2. [Heart Attack Risk Prediction Dataset](https://www.kaggle.com/datasets/iamsouravbanerjee/heart-attack-prediction-dataset/data)
    
 ## Opendata Proposes
