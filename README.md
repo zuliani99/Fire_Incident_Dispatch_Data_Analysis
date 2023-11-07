@@ -9,7 +9,6 @@ Possible Motorsport Dataset to Propose:
 Other Interesting Dataset to Propose (more interesting):
 1. [Psycological Effects of COVID](https://www.kaggle.com/datasets/hemanthhari/psycological-effects-of-covid/data)
 2. [Heart Attack Risk Prediction Dataset](https://www.kaggle.com/datasets/iamsouravbanerjee/heart-attack-prediction-dataset/data)
-3. [Employee Satisfaction Survey Data](https://www.kaggle.com/datasets/redpen12/employees-satisfaction-analysis/)
    
 ## Opendata Proposes
 Possible idea to invesigate:
