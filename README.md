@@ -9,7 +9,7 @@ This project has the aim to analise and study some behavoiur under a given datas
 ### Other Interesting Dataset to Propose (more interesting):
 1. [Psycological Effects of COVID](https://www.kaggle.com/datasets/hemanthhari/psycological-effects-of-covid/data) (maybe too simple)
 2. [Heart Attack Risk Prediction Dataset](https://www.kaggle.com/datasets/iamsouravbanerjee/heart-attack-prediction-dataset/data)  (maybe too simple pt.2)
-3. [⚖️Swiss Federal Supreme Court Dataset (SCD)](https://www.kaggle.com/datasets/mahdavi1202/swiss-federal-supreme-court-dataset-scd?select=bger-2023-4.csv) (**INTERESTING**)
+3. [⚖️Swiss Federal Supreme Court Dataset (SCD)](https://www.kaggle.com/datasets/mahdavi1202/swiss-federal-supreme-court-dataset-scd?select=bger-2023-4.csv) (**INTERESTING -> TRING TO PROPOSE THIS**)
    
 ## Opendata Proposes
 Possible idea to invesigate:
@@ -18,3 +18,4 @@ Possible idea to invesigate:
 
 ## Kaggle Searches
 1. [CSV, highly voted for: Research](https://www.kaggle.com/datasets?sort=usability&fileType=csv&feedbackIds=9)
+2. [Actual Arrived Search Page](https://www.kaggle.com/datasets?fileType=csv&page=28)

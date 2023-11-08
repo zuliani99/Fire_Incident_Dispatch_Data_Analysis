@@ -1,0 +1,11 @@
+---
+title: "Swiss Federal Supreme Court Dataset (SCD)"
+author: "Zuliani Riccardo 875532"
+date: "8/11/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
