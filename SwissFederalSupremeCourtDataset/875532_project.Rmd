@@ -1,0 +1,24 @@
+---
+title: "Swiss Federal Supreme Court Dataset (SCD)"
+author: "Zuliani Riccardo 875532"
+date: "8/11/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Change this line with the absolute path of your .csv dataset file location
+setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/SwissFederalSupremeCourtDataset")
+```
+
+# Dataset Descriprion
+The Swiss Federal Supreme Court Dataset (SCD) provides a record of all 118,443 cases decided by the Swiss Federal Supreme Court between 2007 and September 2023. The SCD includes 31 variables that document basic case information, the court composition, the area of law, information about the appealed judgment, the parties, the case outcome, and about citations and publication status. The dataset can be used as data infrastructure for both qualitative and quantitative analysis of Federal Supreme Court jurisprudence. It is generated using a fully automated pipeline and will be updated quarterly until at least 2025 to include the latest judgments and possible expansions.
+
+```{r}
+sfscd <- read.csv('bger-2023-4.csv')
+```
+
+```{r}
+summary(sfscd)
+```
