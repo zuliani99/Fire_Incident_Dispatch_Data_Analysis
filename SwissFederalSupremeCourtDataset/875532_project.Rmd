@@ -52,4 +52,20 @@ sfscd <- sfscd[,!names(sfscd) %in% columns_to_drop]
 summary(sfscd)
 ```
 
+```{r}
+print(length(sfscd))
+#sfscd <- na.omit(sfscd)
+#print(length(sfscd))
+```
+
+```{r}
+glm.fit1 <- glm(outcome ~ proc_duration + language + division_type + n_judges + area_general + app_class * app_represented + resp_class * resp_represented, data = sfscd, family = binomial)
+summary(glm.fit1)
+```
+
+
+```{r}
+glm.fit2 <- glm(outcome ~ proc_duration + language + division_type + n_judges + area_general + app_class * resp_class, data = sfscd, family = binomial)
+summary(glm.fit2)
+```
 

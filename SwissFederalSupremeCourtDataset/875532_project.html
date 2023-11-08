@@ -380,6 +380,116 @@ summary(sfscd)</code></pre>
 ##  writeoff      : 4548                  3rd Qu.:  5.000   3rd Qu.:  9.000  
 ##  NA&#39;s          : 3088                  Max.   :106.000   Max.   :117.000  
 ## </code></pre>
+<pre class="r"><code>print(length(sfscd))</code></pre>
+<pre><code>## [1] 20</code></pre>
+<pre class="r"><code>#sfscd &lt;- na.omit(sfscd)
+#print(length(sfscd))</code></pre>
+<pre class="r"><code>glm.fit1 &lt;- glm(outcome ~ proc_duration + language + division_type + n_judges + area_general + app_class * app_represented + resp_class * resp_represented, data = sfscd, family = binomial)
+summary(glm.fit1)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = outcome ~ proc_duration + language + division_type + 
+##     n_judges + area_general + app_class * app_represented + resp_class * 
+##     resp_represented, family = binomial, data = sfscd)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -2.9830   0.1522   0.3252   0.4561   2.6275  
+## 
+## Coefficients:
+##                                          Estimate Std. Error z value Pr(&gt;|z|)
+## (Intercept)                             4.505e+00  9.883e-02  45.583  &lt; 2e-16
+## proc_duration                          -7.579e-04  5.533e-05 -13.699  &lt; 2e-16
+## languagefr                             -1.651e-01  2.356e-02  -7.007 2.43e-12
+## languageit                              1.200e-02  5.227e-02   0.230 0.818411
+## division_typeCriminal                  -7.908e-02  7.793e-02  -1.015 0.310242
+## division_typePublic                    -3.401e-01  5.910e-02  -5.755 8.65e-09
+## n_judges                               -7.109e-01  1.184e-02 -60.053  &lt; 2e-16
+## area_generalPrivatrecht                 2.762e-01  6.272e-02   4.404 1.06e-05
+## area_generalStrafrecht                 -1.709e-01  4.472e-02  -3.821 0.000133
+## app_classnatural                        9.862e-01  6.027e-02  16.362  &lt; 2e-16
+## app_classstate                         -1.082e+00  6.242e-02 -17.328  &lt; 2e-16
+## app_representedTRUE                     1.597e-01  6.261e-02   2.551 0.010749
+## resp_classnatural                      -3.471e-01  7.549e-02  -4.598 4.27e-06
+## resp_classstate                         6.498e-02  6.264e-02   1.037 0.299542
+## resp_representedTRUE                    1.609e-01  7.810e-02   2.060 0.039352
+## app_classnatural:app_representedTRUE   -8.341e-01  7.096e-02 -11.754  &lt; 2e-16
+## app_classstate:app_representedTRUE      1.323e+00  1.320e-01  10.023  &lt; 2e-16
+## resp_classnatural:resp_representedTRUE -1.184e-02  9.248e-02  -0.128 0.898120
+## resp_classstate:resp_representedTRUE   -3.509e-01  8.461e-02  -4.148 3.36e-05
+##                                           
+## (Intercept)                            ***
+## proc_duration                          ***
+## languagefr                             ***
+## languageit                                
+## division_typeCriminal                     
+## division_typePublic                    ***
+## n_judges                               ***
+## area_generalPrivatrecht                ***
+## area_generalStrafrecht                 ***
+## app_classnatural                       ***
+## app_classstate                         ***
+## app_representedTRUE                    *  
+## resp_classnatural                      ***
+## resp_classstate                           
+## resp_representedTRUE                   *  
+## app_classnatural:app_representedTRUE   ***
+## app_classstate:app_representedTRUE     ***
+## resp_classnatural:resp_representedTRUE    
+## resp_classstate:resp_representedTRUE   ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 69890  on 113263  degrees of freedom
+## Residual deviance: 57550  on 113245  degrees of freedom
+##   (5179 osservazioni eliminate a causa di valori mancanti)
+## AIC: 57588
+## 
+## Number of Fisher Scoring iterations: 6</code></pre>
+<pre class="r"><code>glm.fit2 &lt;- glm(outcome ~ proc_duration + language + division_type + n_judges + area_general + app_class * resp_class, data = sfscd, family = binomial)
+summary(glm.fit2)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = outcome ~ proc_duration + language + division_type + 
+##     n_judges + area_general + app_class * resp_class, family = binomial, 
+##     data = sfscd)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -2.9959   0.1854   0.3622   0.4352   2.6942  
+## 
+## Coefficients:
+##                                      Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)                         4.873e+00  9.347e-02  52.137  &lt; 2e-16 ***
+## proc_duration                      -8.009e-04  5.538e-05 -14.462  &lt; 2e-16 ***
+## languagefr                         -1.894e-01  2.343e-02  -8.086 6.16e-16 ***
+## languageit                          1.957e-02  5.207e-02   0.376 0.706959    
+## division_typeCriminal              -1.940e-01  7.770e-02  -2.496 0.012543 *  
+## division_typePublic                -4.381e-01  5.880e-02  -7.450 9.37e-14 ***
+## n_judges                           -7.651e-01  1.119e-02 -68.372  &lt; 2e-16 ***
+## area_generalPrivatrecht             2.160e-01  6.259e-02   3.452 0.000557 ***
+## area_generalStrafrecht             -1.846e-01  4.440e-02  -4.157 3.22e-05 ***
+## app_classnatural                    5.254e-01  8.700e-02   6.039 1.55e-09 ***
+## app_classstate                     -9.776e-01  1.122e-01  -8.713  &lt; 2e-16 ***
+## resp_classnatural                  -2.364e-01  8.851e-02  -2.670 0.007576 ** 
+## resp_classstate                     1.228e-01  8.417e-02   1.458 0.144738    
+## app_classnatural:resp_classnatural -1.236e-01  1.096e-01  -1.128 0.259447    
+## app_classstate:resp_classnatural   -1.483e-01  1.268e-01  -1.169 0.242240    
+## app_classnatural:resp_classstate   -2.318e-01  9.685e-02  -2.393 0.016709 *  
+## app_classstate:resp_classstate      1.733e-01  1.344e-01   1.289 0.197247    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 69890  on 113263  degrees of freedom
+## Residual deviance: 58178  on 113247  degrees of freedom
+##   (5179 osservazioni eliminate a causa di valori mancanti)
+## AIC: 58212
+## 
+## Number of Fisher Scoring iterations: 6</code></pre>
 </div>
 
 
