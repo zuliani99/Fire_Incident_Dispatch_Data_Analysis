@@ -237,6 +237,149 @@ pre code {
 ##                     3rd Qu.:  9.000                                        
 ##                     Max.   :117.000                                        
 ## </code></pre>
+<pre class="r"><code>sfscd$proc_type &lt;- as.factor(sfscd$proc_type)
+sfscd$merged_cases &lt;- as.factor(sfscd$merged_cases)
+sfscd$division &lt;- as.factor(sfscd$division)
+sfscd$division_type &lt;- as.factor(sfscd$division_type)
+sfscd$language &lt;- as.factor(sfscd$language)
+sfscd$area_general &lt;- as.factor(sfscd$area_general)
+sfscd$area_intermediate &lt;- as.factor(sfscd$area_intermediate)
+sfscd$area_detailed &lt;- as.factor(sfscd$area_detailed)
+sfscd$source_canton &lt;- as.factor(sfscd$source_canton)
+sfscd$app_class &lt;- as.factor(sfscd$app_class)
+sfscd$app_represented &lt;- as.factor(sfscd$app_represented)
+sfscd$resp_class &lt;- as.factor(sfscd$resp_class)
+sfscd$resp_represented &lt;- as.factor(sfscd$resp_represented)
+sfscd$outcome &lt;- as.factor(sfscd$outcome)
+sfscd$outcome_binary &lt;- as.factor(sfscd$outcome_binary)
+
+summary(sfscd)</code></pre>
+<pre><code>##        X             docref              url                date          
+##  Min.   :     1   Length:118443      Length:118443      Length:118443     
+##  1st Qu.: 29612   Class :character   Class :character   Class :character  
+##  Median : 59222   Mode  :character   Mode  :character   Mode  :character  
+##  Mean   : 59222                                                           
+##  3rd Qu.: 88833                                                           
+##  Max.   :118443                                                           
+##                                                                           
+##       year               proc_type     merged_cases        division    
+##  Min.   :2007   Action        :   48   FALSE:115054   2. Civil :19553  
+##  1st Qu.:2011   Civil         :26240   TRUE :  3389   Criminal :19196  
+##  Median :2015   Constitutional: 6484                  1. Public:19150  
+##  Mean   :2015   Correction    :  229                  2. Public:17611  
+##  3rd Qu.:2019   Criminal      :27503                  1. Social:14558  
+##  Max.   :2023   Public        :55366                  2. Social:14288  
+##                 Revision      : 2573                  (Other)  :14087  
+##   division_type      n_judges     language       length      
+##  Civil   :32033   Min.   :1.000   de:72448   Min.   :   979  
+##  Criminal:19611   1st Qu.:1.000   fr:39519   1st Qu.:  4523  
+##  Public  :66799   Median :3.000   it: 6476   Median : 10545  
+##                   Mean   :2.471              Mean   : 13317  
+##                   3rd Qu.:3.000              3rd Qu.: 18421  
+##                   Max.   :5.000              Max.   :486447  
+##                   NA&#39;s   :595                                
+##              area_general                            area_intermediate
+##  Öffentliches Recht:66860   Sozialversicherungsrecht          :27473  
+##  Privatrecht       :23543   Strafprozess                      :15657  
+##  Strafrecht        :27990   Strafrecht                        :12333  
+##  NA&#39;s              :   50   Zivilrecht                        :11129  
+##                             Obligationenrecht und Handelsrecht:10899  
+##                             (Other)                           :40902  
+##                             NA&#39;s                              :   50  
+##                              area_detailed      topic          
+##  Strafprozess                       :14973   Length:118443     
+##  Invalidenversicherung              :13201   Class :character  
+##  Schuldbetreibungs- und Konkursrecht: 8709   Mode  :character  
+##  Straftaten                         : 8562                     
+##  Vertragsrecht                      : 8557                     
+##  (Other)                            :64391                     
+##  NA&#39;s                               :   50                     
+##     issue           source_date        source_canton   proc_duration   
+##  Length:118443      Length:118443      ZH     :19840   Min.   :   0.0  
+##  Class :character   Class :character   GE     :12587   1st Qu.:  66.0  
+##  Mode  :character   Mode  :character   VD     :12495   Median : 139.0  
+##                                        CH     : 9793   Mean   : 176.6  
+##                                        BE     : 8318   3rd Qu.: 241.0  
+##                                        (Other):53180   Max.   :7690.0  
+##                                        NA&#39;s   : 2230   NA&#39;s   :1064    
+##    app_class     app_represented   resp_class    resp_represented
+##  legal  :12275   FALSE:55029     legal  :10755   FALSE:83625     
+##  natural:96709   TRUE :60503     natural:20955   TRUE :31907     
+##  state  : 6018   NA&#39;s : 2911     state  :83292   NA&#39;s : 2911     
+##  NA&#39;s   : 3441                   NA&#39;s   : 3441                   
+##                                                                  
+##                                                                  
+##                                                                  
+##            outcome      outcome_binary  cited_bger         n_cited_bger    
+##  granted       :10623   FALSE:95010    Length:118443      Min.   :  0.000  
+##  inadmissible  :43572   TRUE :15797    Class :character   1st Qu.:  1.000  
+##  partly granted: 5174   NA&#39;s : 7636    Mode  :character   Median :  2.000  
+##  rejected      :51438                                     Mean   :  3.874  
+##  writeoff      : 4548                                     3rd Qu.:  5.000  
+##  NA&#39;s          : 3088                                     Max.   :106.000  
+##                                                                            
+##   cited_bge          n_cited_bge      leading_case       doi_version       
+##  Length:118443      Min.   :  0.000   Length:118443      Length:118443     
+##  Class :character   1st Qu.:  1.000   Class :character   Class :character  
+##  Mode  :character   Median :  4.000   Mode  :character   Mode  :character  
+##                     Mean   :  6.255                                        
+##                     3rd Qu.:  9.000                                        
+##                     Max.   :117.000                                        
+## </code></pre>
+<p>To drop</p>
+<pre class="r"><code>columns_to_drop = c(&#39;X&#39;, &#39;docref&#39;, &#39;date&#39;,&#39;year&#39;, &#39;url&#39;, &#39;topic&#39;, &#39;issue&#39;, &#39;source_date&#39;, &#39;cited_bger&#39;, &#39;cited_bge&#39;, &#39;leading_case&#39;, &#39;doi_version&#39;)
+
+sfscd &lt;- sfscd[,!names(sfscd) %in% columns_to_drop]
+
+summary(sfscd)</code></pre>
+<pre><code>##           proc_type     merged_cases        division      division_type  
+##  Action        :   48   FALSE:115054   2. Civil :19553   Civil   :32033  
+##  Civil         :26240   TRUE :  3389   Criminal :19196   Criminal:19611  
+##  Constitutional: 6484                  1. Public:19150   Public  :66799  
+##  Correction    :  229                  2. Public:17611                   
+##  Criminal      :27503                  1. Social:14558                   
+##  Public        :55366                  2. Social:14288                   
+##  Revision      : 2573                  (Other)  :14087                   
+##     n_judges     language       length                   area_general  
+##  Min.   :1.000   de:72448   Min.   :   979   Öffentliches Recht:66860  
+##  1st Qu.:1.000   fr:39519   1st Qu.:  4523   Privatrecht       :23543  
+##  Median :3.000   it: 6476   Median : 10545   Strafrecht        :27990  
+##  Mean   :2.471              Mean   : 13317   NA&#39;s              :   50  
+##  3rd Qu.:3.000              3rd Qu.: 18421                             
+##  Max.   :5.000              Max.   :486447                             
+##  NA&#39;s   :595                                                           
+##                           area_intermediate
+##  Sozialversicherungsrecht          :27473  
+##  Strafprozess                      :15657  
+##  Strafrecht                        :12333  
+##  Zivilrecht                        :11129  
+##  Obligationenrecht und Handelsrecht:10899  
+##  (Other)                           :40902  
+##  NA&#39;s                              :   50  
+##                              area_detailed   source_canton   proc_duration   
+##  Strafprozess                       :14973   ZH     :19840   Min.   :   0.0  
+##  Invalidenversicherung              :13201   GE     :12587   1st Qu.:  66.0  
+##  Schuldbetreibungs- und Konkursrecht: 8709   VD     :12495   Median : 139.0  
+##  Straftaten                         : 8562   CH     : 9793   Mean   : 176.6  
+##  Vertragsrecht                      : 8557   BE     : 8318   3rd Qu.: 241.0  
+##  (Other)                            :64391   (Other):53180   Max.   :7690.0  
+##  NA&#39;s                               :   50   NA&#39;s   : 2230   NA&#39;s   :1064    
+##    app_class     app_represented   resp_class    resp_represented
+##  legal  :12275   FALSE:55029     legal  :10755   FALSE:83625     
+##  natural:96709   TRUE :60503     natural:20955   TRUE :31907     
+##  state  : 6018   NA&#39;s : 2911     state  :83292   NA&#39;s : 2911     
+##  NA&#39;s   : 3441                   NA&#39;s   : 3441                   
+##                                                                  
+##                                                                  
+##                                                                  
+##            outcome      outcome_binary  n_cited_bger      n_cited_bge     
+##  granted       :10623   FALSE:95010    Min.   :  0.000   Min.   :  0.000  
+##  inadmissible  :43572   TRUE :15797    1st Qu.:  1.000   1st Qu.:  1.000  
+##  partly granted: 5174   NA&#39;s : 7636    Median :  2.000   Median :  4.000  
+##  rejected      :51438                  Mean   :  3.874   Mean   :  6.255  
+##  writeoff      : 4548                  3rd Qu.:  5.000   3rd Qu.:  9.000  
+##  NA&#39;s          : 3088                  Max.   :106.000   Max.   :117.000  
+## </code></pre>
 </div>
 
 

@@ -22,3 +22,34 @@ sfscd <- read.csv('bger-2023-4.csv')
 ```{r}
 summary(sfscd)
 ```
+
+```{r}
+sfscd$proc_type <- as.factor(sfscd$proc_type)
+sfscd$merged_cases <- as.factor(sfscd$merged_cases)
+sfscd$division <- as.factor(sfscd$division)
+sfscd$division_type <- as.factor(sfscd$division_type)
+sfscd$language <- as.factor(sfscd$language)
+sfscd$area_general <- as.factor(sfscd$area_general)
+sfscd$area_intermediate <- as.factor(sfscd$area_intermediate)
+sfscd$area_detailed <- as.factor(sfscd$area_detailed)
+sfscd$source_canton <- as.factor(sfscd$source_canton)
+sfscd$app_class <- as.factor(sfscd$app_class)
+sfscd$app_represented <- as.factor(sfscd$app_represented)
+sfscd$resp_class <- as.factor(sfscd$resp_class)
+sfscd$resp_represented <- as.factor(sfscd$resp_represented)
+sfscd$outcome <- as.factor(sfscd$outcome)
+sfscd$outcome_binary <- as.factor(sfscd$outcome_binary)
+
+summary(sfscd)
+```
+
+To drop
+```{r}
+columns_to_drop = c('X', 'docref', 'date','year', 'url', 'topic', 'issue', 'source_date', 'cited_bger', 'cited_bge', 'leading_case', 'doi_version')
+
+sfscd <- sfscd[,!names(sfscd) %in% columns_to_drop]
+
+summary(sfscd)
+```
+
+
