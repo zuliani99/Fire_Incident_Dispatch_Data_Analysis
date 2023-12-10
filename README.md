@@ -19,3 +19,15 @@ Possible idea to invesigate:
 ## Kaggle Searches
 1. [CSV, highly voted for: Research](https://www.kaggle.com/datasets?sort=usability&fileType=csv&feedbackIds=9)
 2. [Actual Arrived Search Page](https://www.kaggle.com/datasets?fileType=csv&page=28)
+
+
+## NY OpenData
+1. [Fire Incident Dispatch Data](https://data.cityofnewyork.us/Public-Safety/Fire-Incident-Dispatch-Data/8m42-w767)
+2. [Active Projects Under Construction](https://data.cityofnewyork.us/Housing-Development/Active-Projects-Under-Construction/8586-3zfm)
+3. [Bridge Ratings](https://data.cityofnewyork.us/Transportation/Bridge-Ratings/4yue-vjfc)
+4. [Asbestos Control Program (ACP7)](https://data.cityofnewyork.us/Environment/Asbestos-Control-Program-ACP7-/vq35-j9qm)
+5. [Capital Projects](https://data.cityofnewyork.us/City-Government/Capital-Projects/n7gv-k5yt)
+6. [Housing Maintenance Code Violations](https://data.cityofnewyork.us/Housing-Development/Housing-Maintenance-Code-Violations/wvxf-dwi5)
+7. [NYPD Shooting Incident Data (Historic)](https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8)
+
+Arrived to serach [this page](https://data.cityofnewyork.us/browse?limitTo=datasets&page=33) 
