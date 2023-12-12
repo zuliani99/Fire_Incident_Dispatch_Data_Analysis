@@ -1,0 +1,21 @@
+---
+title: "Fire Incident Dispatch Data Analysis"
+author: "Zuliani Riccardo"
+date: "12/12/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
+```
+
+# Fire Incident Dispatch Data Analysis
+Try to read the data and see the summary
+
+```{r read_data}
+fire_data <- read.csv("Fire_Incident_Dispatch_Data_20231210.csv")
+summary(fire_data)
+```
+
+

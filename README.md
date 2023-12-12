@@ -1,4 +1,4 @@
-# Statistical Inference and Learning Project
+# Fire Incident Dispatch Data Analysis
 This project has the aim to analise and study some behavoiur under a given dataset
 
 ## Choosen Dataset
