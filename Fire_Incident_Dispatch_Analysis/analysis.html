@@ -171,11 +171,106 @@ pre code {
 
 <div id="fire-incident-dispatch-data-analysis" class="section level1">
 <h1>Fire Incident Dispatch Data Analysis</h1>
-<p>Try to read the data and see the summary</p>
-<pre class="r"><code>print(&#39;Prova&#39;)</code></pre>
-<pre><code>## [1] &quot;Prova&quot;</code></pre>
-<pre class="r"><code>#fire_data &lt;- tail(read.csv(&quot;Fire_Incident_Dispatch_Data_20231210.csv&quot;), 500000)
-#summary(fire_data)</code></pre>
+<p>Read the restricted dataset of last 500k observation form the original 10.000.000 observations dataset</p>
+<pre class="r"><code>fire_data &lt;- read.csv(&quot;Fire_Incident_Dispatch_Data_last_500k.csv&quot;)
+summary(fire_data)</code></pre>
+<pre><code>##  STARFIRE_INCIDENT_ID INCIDENT_DATETIME  ALARM_BOX_BOROUGH  ALARM_BOX_NUMBER
+##  Length:500000        Length:500000      Length:500000      Min.   :  10    
+##  Class :character     Class :character   Class :character   1st Qu.:1072    
+##  Mode  :character     Mode  :character   Mode  :character   Median :2275    
+##                                                             Mean   :2931    
+##                                                             3rd Qu.:3816    
+##                                                             Max.   :9949    
+##                                                                             
+##  ALARM_BOX_LOCATION INCIDENT_BOROUGH      ZIPCODE      POLICEPRECINCT  
+##  Length:500000      Length:500000      Min.   :10000   Min.   :  1.00  
+##  Class :character   Class :character   1st Qu.:10128   1st Qu.: 34.00  
+##  Mode  :character   Mode  :character   Median :10472   Median : 61.00  
+##                                        Mean   :10738   Mean   : 62.41  
+##                                        3rd Qu.:11226   3rd Qu.: 94.00  
+##                                        Max.   :12345   Max.   :123.00  
+##                                        NA&#39;s   :30862   NA&#39;s   :30859   
+##  CITYCOUNCILDISTRICT COMMUNITYDISTRICT COMMUNITYSCHOOLDISTRICT
+##  Min.   : 1.00       Min.   :101.0     Min.   : 1.00          
+##  1st Qu.: 9.00       1st Qu.:112.0     1st Qu.: 6.00          
+##  Median :21.00       Median :302.0     Median :13.00          
+##  Mean   :23.21       Mean   :263.3     Mean   :14.88          
+##  3rd Qu.:36.00       3rd Qu.:318.0     3rd Qu.:24.00          
+##  Max.   :51.00       Max.   :595.0     Max.   :32.00          
+##  NA&#39;s   :30859       NA&#39;s   :30859     NA&#39;s   :30868          
+##  CONGRESSIONALDISTRICT ALARM_SOURCE_DESCRIPTION_TX
+##  Min.   : 3.00         Length:500000              
+##  1st Qu.: 8.00         Class :character           
+##  Median :11.00         Mode  :character           
+##  Mean   :10.45                                    
+##  3rd Qu.:13.00                                    
+##  Max.   :16.00                                    
+##  NA&#39;s   :30859                                    
+##  ALARM_LEVEL_INDEX_DESCRIPTION HIGHEST_ALARM_LEVEL INCIDENT_CLASSIFICATION
+##  Length:500000                 Length:500000       Length:500000          
+##  Class :character              Class :character    Class :character       
+##  Mode  :character              Mode  :character    Mode  :character       
+##                                                                           
+##                                                                           
+##                                                                           
+##                                                                           
+##  INCIDENT_CLASSIFICATION_GROUP DISPATCH_RESPONSE_SECONDS_QY
+##  Length:500000                 Min.   :    1.00            
+##  Class :character              1st Qu.:    6.00            
+##  Mode  :character              Median :   17.00            
+##                                Mean   :   37.78            
+##                                3rd Qu.:   39.00            
+##                                Max.   :13814.00            
+##                                NA&#39;s   :169                 
+##  FIRST_ASSIGNMENT_DATETIME FIRST_ACTIVATION_DATETIME FIRST_ON_SCENE_DATETIME
+##  Length:500000             Length:500000             Length:500000          
+##  Class :character          Class :character          Class :character       
+##  Mode  :character          Mode  :character          Mode  :character       
+##                                                                             
+##                                                                             
+##                                                                             
+##                                                                             
+##  INCIDENT_CLOSE_DATETIME VALID_DISPATCH_RSPNS_TIME_INDC
+##  Length:500000           Length:500000                 
+##  Class :character        Class :character              
+##  Mode  :character        Mode  :character              
+##                                                        
+##                                                        
+##                                                        
+##                                                        
+##  VALID_INCIDENT_RSPNS_TIME_INDC INCIDENT_RESPONSE_SECONDS_QY
+##  Length:500000                  Min.   :    9.0             
+##  Class :character               1st Qu.:  261.0             
+##  Mode  :character               Median :  330.0             
+##                                 Mean   :  373.6             
+##                                 3rd Qu.:  421.0             
+##                                 Max.   :48920.0             
+##                                 NA&#39;s   :140869              
+##  INCIDENT_TRAVEL_TM_SECONDS_QY ENGINES_ASSIGNED_QUANTITY
+##  Min.   :-5912.0               Min.   : 0.000           
+##  1st Qu.:  229.0               1st Qu.: 1.000           
+##  Median :  298.0               Median : 1.000           
+##  Mean   :  335.5               Mean   : 1.121           
+##  3rd Qu.:  388.0               3rd Qu.: 1.000           
+##  Max.   :48680.0               Max.   :56.000           
+##  NA&#39;s   :140881                NA&#39;s   :487              
+##  LADDERS_ASSIGNED_QUANTITY OTHER_UNITS_ASSIGNED_QUANTITY
+##  Min.   : 0.0000           Min.   : 0.0000              
+##  1st Qu.: 0.0000           1st Qu.: 0.0000              
+##  Median : 0.0000           Median : 0.0000              
+##  Mean   : 0.5589           Mean   : 0.3208              
+##  3rd Qu.: 1.0000           3rd Qu.: 0.0000              
+##  Max.   :41.0000           Max.   :65.0000              
+##  NA&#39;s   :487               NA&#39;s   :487</code></pre>
+<pre class="r"><code>fire_data$ALARM_BOX_BOROUGH &lt;- as.factor(fire_data$ALARM_BOX_BOROUGH)
+fire_data$INCIDENT_BOROUGH &lt;- as.factor(fire_data$INCIDENT_BOROUGH)
+fire_data$ALARM_SOURCE_DESCRIPTION_TX &lt;- as.factor(fire_data$ALARM_SOURCE_DESCRIPTION_TX)
+fire_data$ALARM_LEVEL_INDEX_DESCRIPTION &lt;- as.factor(fire_data$ALARM_LEVEL_INDEX_DESCRIPTION)
+fire_data$HIGHEST_ALARM_LEVEL &lt;- as.factor(fire_data$HIGHEST_ALARM_LEVEL)
+fire_data$INCIDENT_CLASSIFICATION &lt;- as.factor(fire_data$INCIDENT_CLASSIFICATION)
+fire_data$INCIDENT_CLASSIFICATION_GROUP &lt;- as.factor(fire_data$INCIDENT_CLASSIFICATION_GROUP)
+
+#fire_data$road1 &lt;- as.factor(strsplit(fire_data$INCIDENT_BOROUGH,&#39; &amp; &#39;,fixed=T))</code></pre>
 </div>
 
 

@@ -11,10 +11,49 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 ```
 
 # Fire Incident Dispatch Data Analysis
-Try to read the data and see the summary
+Read the restricted dataset of last 500k observation form the original 10.000.000 observations dataset
 
 ```{r read_data}
-print('Prova')
-#fire_data <- tail(read.csv("Fire_Incident_Dispatch_Data_20231210.csv"), 500000)
-#summary(fire_data)
+fire_data <- read.csv("Fire_Incident_Dispatch_Data_last_500k.csv")
+summary(fire_data)
 ```
+
+Remove some columns
+```{r}
+fire_data = subset(fire_data, select = -c(
+  ALARM_BOX_BOROUGH, STARFIRE_INCIDENT_ID, INCIDENT_CLASSIFICATION,
+  VALID_DISPATCH_RSPNS_TIME_INDC, DISPATCH_RESPONSE_SECONDS_QY
+))
+```
+
+Set some factorials
+
+```{r}
+fire_data$INCIDENT_BOROUGH <- as.factor(fire_data$INCIDENT_BOROUGH)
+fire_data$ALARM_SOURCE_DESCRIPTION_TX <- as.factor(fire_data$ALARM_SOURCE_DESCRIPTION_TX)
+fire_data$ALARM_LEVEL_INDEX_DESCRIPTION <- as.factor(fire_data$ALARM_LEVEL_INDEX_DESCRIPTION)
+fire_data$HIGHEST_ALARM_LEVEL <- as.factor(fire_data$HIGHEST_ALARM_LEVEL)
+
+
+#temporarly removed -> when al the analisys is good I can try to predict this also
+#fire_data$INCIDENT_CLASSIFICATION <- as.factor(fire_data$INCIDENT_CLASSIFICATION)
+
+fire_data$INCIDENT_CLASSIFICATION_GROUP <- as.factor(fire_data$INCIDENT_CLASSIFICATION_GROUP)
+
+# Li rimuovo lo rimuovo siccome il boolean è sempre a false??????????
+#fire_data$VALID_DISPATCH_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_DISPATCH_RSPNS_TIME_INDC)
+fire_data$VALID_INCIDENT_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
+
+
+# ALARM_BOX_LOCATION ---------------- DA MODELLARE MEGLIO
+#fire_data$road1 <- as.factor(strsplit(fire_data$INCIDENT_BOROUGH,' & ',fixed=T))
+```
+
+```{r}
+summary(fire_data)
+```
+
+```{r}
+fire_data[is.na(fire_data$ENGINES_ASSIGNED_QUANTITY),]
+```
+
