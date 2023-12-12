@@ -14,8 +14,7 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 Try to read the data and see the summary
 
 ```{r read_data}
-fire_data <- read.csv("Fire_Incident_Dispatch_Data_20231210.csv")
-summary(fire_data)
+print('Prova')
+#fire_data <- tail(read.csv("Fire_Incident_Dispatch_Data_20231210.csv"), 500000)
+#summary(fire_data)
 ```
-
-
