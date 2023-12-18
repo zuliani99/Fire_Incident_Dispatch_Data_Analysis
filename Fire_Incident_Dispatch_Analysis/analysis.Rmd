@@ -8,6 +8,14 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
+
+install.packages("nnet")
+install.packages("jmv")
+install.packages("summarytools")
+
+library(nnet)
+library(jmv)
+library(summarytools)
 ```
 
 # Fire Incident Dispatch Data Analysis
@@ -49,11 +57,74 @@ fire_data$VALID_INCIDENT_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_INCIDENT_R
 #fire_data$road1 <- as.factor(strsplit(fire_data$INCIDENT_BOROUGH,' & ',fixed=T))
 ```
 
+Rename allo tha columns with a shorter and usable name
+```{r}
+names(fire_data) <- c("fire_datetime", "AL_number", "AL_loction", "incident_brough", "zip", "Pprecint", "citycouncil_dist", "community_dist", "comm_school_dist", "congressional_dist", "alarm_source_desc", "alarm_level_idx", "highest_alarm_lev", "incident_class", "first_ass_date", "first_act_date", "first_on_scene_date", "incident_close_date", "valid_inc_resp_time_indc", "incident_resp_sec", "incident_travel_time_sec", "engines_assigned", "ladders_assigned", "other_utits_assigned")
+names(fire_data)
+```
+
+
+
 ```{r}
 summary(fire_data)
 ```
 
+Removing all the nan from the dataset
 ```{r}
-fire_data[is.na(fire_data$ENGINES_ASSIGNED_QUANTITY),]
+#fire_data[is.na(fire_data$ENGINES_ASSIGNED_QUANTITY),]
+fire_data <- na.omit(fire_data)
+summary(fire_data)
+```
+
+
+
+Train test split
+```{r}
+sample <- sample(c(TRUE, FALSE), nrow(fire_data), replace=TRUE, prob=c(0.7,0.3))
+fire_data.train <- fire_data[sample, ]
+fire_data.test <- fire_data[!sample, ]
+fire_data.test <- subset(fire_data.test, select = -incident_class)
+```
+
+
+```{r}
+dfSummary(fire_data.train, style='grid', plain.ascii = FALSE, graph.col = FALSE)
+```
+
+
+
+# Molutinomial Logistic Regression
+```{r}
+#mod = multinom(incident_class ~ engines_assigned + ladders_assigned + incident_resp_sec + incident_brough + alarm_source_desc, data = fire_data.train, family = "binomial")
+multi_nom_1 = multinom(incident_class ~ incident_resp_sec, data = fire_data.train, model=TRUE)
+summary(multi_nom_1)
+```
+
+```{r}
+# Check the Z-score for the model (wald Z)
+z <- summary(multi_nom_1)$coefficients/summary(multi_nom_1)$standard.errors
+z
+```
+
+```{r}
+# 2-tailed z test
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+p
+```
+
+
+```{r}
+# Test the goodness of fit
+chisq.test(fire_data.train$incident_class,predict(multi_nom_1))
+```
+
+```{r}
+exp(coef(multi_nom_1))
+```
+
+```{r}
+library(summarytools)
+ctable <- table(fire_data.train$incident_class,predict(multi_nom_1))
+ctable
 ```
 
