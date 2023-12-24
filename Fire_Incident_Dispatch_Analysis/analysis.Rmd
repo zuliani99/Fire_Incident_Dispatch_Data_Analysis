@@ -3,10 +3,12 @@ title: "Fire Incident Dispatch Data Analysis"
 author: "Zuliani Riccardo"
 date: "12/12/2023"
 output: html_document
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE) #, cache=TRUE
+#knitr::opts_chunk$set(echo = TRUE) #, cache=TRUE
 setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
 
 #install.packages("nnet")
@@ -20,8 +22,7 @@ library(ggplot2)
 ```
 
 # Fire Incident Dispatch Data Analysis
-Read the restricted dataset of last 100k observation form the original 10.000.000 observations dataset
-last 100k or 50k observation
+Read the restricted dataset of last 50k observation form the original 10.000.000 observations dataset
 
 
 
@@ -35,59 +36,89 @@ last 100k or 50k observation
 
 ```{r read_data, cache=TRUE}
 fire_data <- read.csv("Fire_Incident_Dispatch_Data_last_50k.csv")
-summary(fire_data)
+
+print(dfSummary(fire_data, 
+                varnumbers   = FALSE, 
+                valid.col    = FALSE, 
+                graph.magnif = 0.76),
+                method = 'render')
 ```
 
-Check column before deleting them
+## Check column before deleting them
+
 ```{r}
-print(identical(fire_data$ALARM_BOX_BOROUGH, fire_data$INCIDENT_BOROUGH))
+identical(fire_data$ALARM_BOX_BOROUGH, fire_data$INCIDENT_BOROUGH)
+```
+The column ALARM_BOX_BOROUGH and INCIDENT_BOROUGH have the same sequence of values, so we can delete one of the two
+
+```{r}
 fire_data$VALID_DISPATCH_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_DISPATCH_RSPNS_TIME_INDC)
-print(summary(fire_data$VALID_DISPATCH_RSPNS_TIME_IND))
-fire_data$VALID_INCIDENT_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
-print(summary(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC))
+summary(fire_data$VALID_DISPATCH_RSPNS_TIME_IND)
 ```
-So we can remove both involved columns with the additional DISPATCH_RESPONSE_SECONDS_QY
+All our observations have non valid VALID_DISPATCH_RSPNS_TIME_IND so we can delete both the column indicator and the respective column quantity
 
-Remove some columns
+
+
 ```{r}
-fire_data = subset(fire_data, select = -c(
-  STARFIRE_INCIDENT_ID, INCIDENT_CLASSIFICATION, ALARM_BOX_BOROUGH,
-  VALID_DISPATCH_RSPNS_TIME_INDC, DISPATCH_RESPONSE_SECONDS_QY
-))
+fire_data$VALID_INCIDENT_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
+summary(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
 ```
+Whereas here we have some observations with valid VALID_INCIDENT_RSPNS_TIME_INDC, we will delete the one that has a non valid attribute
 
-Set some factorials
 
+
+Le's set some factorials
 ```{r}
 fire_data$INCIDENT_BOROUGH <- as.factor(fire_data$INCIDENT_BOROUGH)
 fire_data$ALARM_SOURCE_DESCRIPTION_TX <- as.factor(fire_data$ALARM_SOURCE_DESCRIPTION_TX)
 fire_data$ALARM_LEVEL_INDEX_DESCRIPTION <- as.factor(fire_data$ALARM_LEVEL_INDEX_DESCRIPTION)
 fire_data$HIGHEST_ALARM_LEVEL <- as.factor(fire_data$HIGHEST_ALARM_LEVEL)
-
 fire_data$INCIDENT_CLASSIFICATION_GROUP <- as.factor(fire_data$INCIDENT_CLASSIFICATION_GROUP)
-
-# Li rimuovo lo rimuovo siccome il boolean è sempre a false??????????
-#fire_data$VALID_DISPATCH_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_DISPATCH_RSPNS_TIME_INDC)
 fire_data$VALID_INCIDENT_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
+fire_data$INCIDENT_CLASSIFICATION <- as.factor(fire_data$INCIDENT_CLASSIFICATION)
 levels(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)<- c("N", "Y")
 
-
-# ALARM_BOX_LOCATION ---------------- DA MODELLARE MEGLIO
-
-summary(fire_data)
+# alarm_box location is a little bit difficult to model it is better to focus in the big area
 ```
+
+
+
+Now we want to know how many INCIDENT_CLASSIFICATION class are summarized in each INCIDENT_CLASSIFICATION_GROUP
+```{r}
+print(ctable(fire_data$INCIDENT_CLASSIFICATION, fire_data$INCIDENT_CLASSIFICATION_GROUP), method = 'render')
+```
+
+```{r}
+#for (incident in levels(fire_data$INCIDENT_CLASSIFICATION_GROUP)) {
+  #sub <- subset(fire_data, fire_data$INCIDENT_CLASSIFICATION_GROUP == incident)
+  #factorial_counts <- table(sub$INCIDENT_CLASSIFICATION)
+
+  # Extract non-zero levels and their counts
+  #non_zero_levels <- names(factorial_counts[factorial_counts != 0])
+  #cat("INCIDENT GROUP: ", incident, "\n")
+  #cat("INCIDENT:": non_zero_levels)
+  #cat("\n\n")
+#}
+```
+As we can see from the upper table all the INCIDENT_CLASSIFICATION_GROUP have a unique set of INCIDENT_CLASSIFICATION 
+
+
+Remove some columns
+```{r}
+fire_data = subset(fire_data, select = -c(
+  STARFIRE_INCIDENT_ID, ALARM_BOX_BOROUGH, INCIDENT_CLASSIFICATION,
+  VALID_DISPATCH_RSPNS_TIME_INDC, DISPATCH_RESPONSE_SECONDS_QY,
+  FIRST_ASSIGNMENT_DATETIME, FIRST_ACTIVATION_DATETIME, FIRST_ON_SCENE_DATETIME, INCIDENT_CLOSE_DATETIME 
+))
+```
+
 
 Rename all the columns with a shorter and usable name
 ```{r}
-names(fire_data) <- c("fire_datetime", "AL_number", "AL_loction", "incident_brough", "zip", "Pprecint", "citycouncil_dist", "community_dist", "comm_school_dist", "congressional_dist", "alarm_source_desc", "alarm_level_idx", "highest_alarm_lev", "incident_class", "first_ass_date", "first_act_date", "first_on_scene_date", "incident_close_date", "valid_inc_resp_time_indc", "incident_resp_sec", "incident_travel_time_sec", "engines_assigned", "ladders_assigned", "other_utits_assigned")
+names(fire_data) <- c("fire_datetime", "AL_number", "AL_loction", "incident_brough", "zip", "Pprecint", "citycouncil_dist", "community_dist", "comm_school_dist", "congressional_dist", "alarm_source_desc", "alarm_level_idx", "highest_alarm_lev", "incident_class", "valid_inc_resp_time_indc", "incident_resp_sec", "incident_travel_time_sec", "engines_assigned", "ladders_assigned", "other_utits_assigned")
 names(fire_data)
 ```
 
-
-
-```{r}
-summary(fire_data)
-```
 
 See the relation with the nan values, check if there is some patter or not
 ```{r}
@@ -95,112 +126,166 @@ summary(fire_data$valid_inc_resp_time_indc)
 ```
 
 ```{r}
-tab_orig_incident_brough <- table(fire_data$incident_brough)
-tab_orig_incident_brough
+table(fire_data$incident_brough)
 ```
 
 
 
 ```{r}
 non_valid_inc_resp <- subset(fire_data, valid_inc_resp_time_indc == "N")
-tab_table_non_valid_inc_resp_incident_brough <- table(non_valid_inc_resp$incident_brough)
-tab_table_non_valid_inc_resp_incident_brough
+table(non_valid_inc_resp$incident_brough)
 ```
 
 ```{r}
-for (variable in names(fire_data$incident_brough)) {
-  print(variable)
-  #print(tab_orig_incident_brough[variable] / tab_table_non_valid_inc_resp_incident_brough[variable])  
-}
+table(non_valid_inc_resp$incident_brough) / table(fire_data$incident_brough)
 ```
 
-They all seems to be uniformly distribuited wrt the location
+More or less all the neighbours have the same distribution of NA values respect the valid_inc_resp_time_indc columns
 
 
-Removing all the nan from the dataset
+Removing all the NA from the dataset
 ```{r}
-#fire_data[is.na(fire_data$ENGINES_ASSIGNED_QUANTITY),]
-
-#commentare se ci sia un pattern nelle osservazioni nan
-
-# prendere tutte le osservazioni che hanno un valid_inc_resp_time_indc
-#fire_data <- fire_data[fire_data$valid_inc_resp_time_indc == ]
+# Select the observations with the valid_inc_resp_time_indc set to Y
+fire_data <- subset(fire_data, valid_inc_resp_time_indc == "Y")
 
 fire_data <- na.omit(fire_data)
-summary(fire_data)
+
+print(dfSummary(fire_data, 
+                varnumbers   = FALSE, 
+                valid.col    = FALSE, 
+                graph.magnif = 0.76),
+                method = 'render')
 ```
 
 ## Merging factor
 
 ```{r}
-# incident class
-#fire_data[fire_data$valid_inc_resp_time_indc ]
-
-# the columns that have lots of factors
-
-
-# let's try with highest_alarm_lev
-#summary(fire_data$highest_alarm_lev)
+# highest_alarm_lev
 fire_data$highest_alarm_lev_new <- fire_data$highest_alarm_lev
-levels(fire_data$highest_alarm_lev_new) <- list("All Hands Working" = "All Hands Working",
-                                                "First Alarm" = "First Alarm", 
-                                                "Others" = c("Second Alarm", "Third Alarm"))
+levels(fire_data$highest_alarm_lev_new) <- list(
+  "All Hands Working" = "All Hands Working",
+  "First Alarm" = "First Alarm", 
+  "2nd-3rd Alarm" = c("Second Alarm", "Third Alarm")
+)
+
+print(ctable(fire_data$highest_alarm_lev, fire_data$highest_alarm_lev_new), method = 'render')
+
+fire_data$highest_alarm_lev <- fire_data$highest_alarm_lev_new
+fire_data$highest_alarm_lev_new <- NULL
 ```
 
 ```{r}
-fire_data <- subset(fire_data, select = -highest_alarm_lev)
-summary(fire_data$highest_alarm_lev_new) # ERROREEEEEE
+# alarm_level_idx
+fire_data$alarm_level_idx_new <- fire_data$alarm_level_idx
+levels(fire_data$alarm_level_idx_new) <- list(
+  "DEFAULT RECORD" = "DEFAULT RECORD",
+  "Initial Alarm" = "Initial Alarm", 
+  "Others" = c("Second Alarm", "Third Alarm", "7-5 (All Hands Alarm)", 
+               "10-76 & 10-77 Signal (Notification Hi-Rise Fire)",
+               "10-75 Signal (Request for all hands alarm)")
+)
+
+print(ctable(fire_data$alarm_level_idx, fire_data$alarm_level_idx_new), method = 'render')
+
+fire_data$alarm_level_idx <- fire_data$alarm_level_idx_new
+fire_data$alarm_level_idx_new <- NULL
+```
+
+
+```{r}
+# alarm_source_desc
+fire_data$alarm_source_desc_new <- fire_data$alarm_source_desc
+levels(fire_data$alarm_source_desc_new) <- list(
+  "PHONE" = "PHONE",
+  "EMS" = "EMS",
+  "EMS-911" = "EMS-911",
+  "CLASS-3" = "CLASS-3",
+  "Others" = c("911", "911TEXT", "VERBAL", "BARS", "ERS", "ERS-NC", "SOL")
+)
+
+print(ctable(fire_data$alarm_source_desc, fire_data$alarm_source_desc_new), method = 'render')
+
+fire_data$alarm_source_desc <- fire_data$alarm_source_desc_new
+fire_data$alarm_source_desc_new <- NULL
+```
+
+```{r}
+print(dfSummary(fire_data, 
+                varnumbers   = FALSE, 
+                valid.col    = FALSE, 
+                graph.magnif = 0.76),
+                method = 'render')
+```
+
+Check the distribution of the classes
+```{r}
+round(summary(fire_data$incident_class) / nrow(fire_data), digits = 4)
 ```
 
 
 
 Train test split
 ```{r}
-sample <- sample(c(TRUE, FALSE), nrow(fire_data), replace=TRUE, prob=c(0.7,0.3))
+sample <- sample(c(TRUE, FALSE), nrow(fire_data), replace=TRUE, prob=c(0.8,0.2))
 fire_data.train <- fire_data[sample, ]
 fire_data.test <- fire_data[!sample, ]
 fire_data.test <- subset(fire_data.test, select = -incident_class)
+dim(fire_data.train)
+dim(fire_data.test)
 ```
 
 
+
+Check the distribution of the class in the train set
 ```{r}
-#dfSummary(fire_data.train, style='grid', plain.ascii = FALSE, graph.col = FALSE)
+round(summary(fire_data.train$incident_class) / nrow(fire_data.train), digits = 4)
 ```
+The distribution is pretty similar to the previous one, more over if we consider separately the each main incident category we will end with three dataset with one of the three having the majority of the observations.
 
+## TODO
+1. Know the meaning of the incident class -> fatto basta guardare la tabella riassuntiva
+2. View if there are some relation within the missing data -> faccio questo domani
+3. Start to plot some data to see some relation between some data
+
+## Check if solving the problem as a classification task wrt each main class so 
+1. structural and non-structural fire
+2. medical and non-medical emergency
+3. medical and non-medical MFAs
 
 
 # Molutinomial Logistic Regression
 ```{r}
 #mod = multinom(incident_class ~ engines_assigned + ladders_assigned + incident_resp_sec + incident_brough + alarm_source_desc, data = fire_data.train, family = "binomial")
-multi_nom_1 = multinom(incident_class ~ incident_resp_sec, data = fire_data.train, model=TRUE)
-summary(multi_nom_1)
+
+#multi_nom_1 = multinom(incident_class ~ incident_resp_sec, data = fire_data.train, model=TRUE)
+#summary(multi_nom_1)
 ```
 
 ```{r}
 # Check the Z-score for the model (wald Z)
-z <- summary(multi_nom_1)$coefficients/summary(multi_nom_1)$standard.errors
-z
+#z <- summary(multi_nom_1)$coefficients/summary(multi_nom_1)$standard.errors
+#z
 ```
 
 ```{r}
 # 2-tailed z test
-p <- (1 - pnorm(abs(z), 0, 1)) * 2
-p
+#p <- (1 - pnorm(abs(z), 0, 1)) * 2
+#p
 ```
 
 
 ```{r}
 # Test the goodness of fit
-chisq.test(fire_data.train$incident_class,predict(multi_nom_1))
+#chisq.test(fire_data.train$incident_class,predict(multi_nom_1))
 ```
 
 ```{r}
-exp(coef(multi_nom_1))
+#exp(coef(multi_nom_1))
 ```
 
 ```{r}
-library(summarytools)
-ctable <- table(fire_data.train$incident_class,predict(multi_nom_1))
-ctable
+#library(summarytools)
+#ctable <- table(fire_data.train$incident_class,predict(multi_nom_1))
+#ctable
 ```
 
