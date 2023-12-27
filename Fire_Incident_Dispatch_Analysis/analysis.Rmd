@@ -16,9 +16,9 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 #install.packages("summarytools")
 
 library(nnet)
-library(jmv)
+#library(jmv)
 library(summarytools)
-library(ggplot2)
+#library(ggplot2)
 ```
 
 # Fire Incident Dispatch Data Analysis
@@ -67,18 +67,20 @@ Whereas here we have some observations with valid VALID_INCIDENT_RSPNS_TIME_INDC
 
 
 
-Le's set some factorials
+Let's set some factorials
 ```{r}
 fire_data$INCIDENT_BOROUGH <- as.factor(fire_data$INCIDENT_BOROUGH)
 fire_data$ALARM_SOURCE_DESCRIPTION_TX <- as.factor(fire_data$ALARM_SOURCE_DESCRIPTION_TX)
 fire_data$ALARM_LEVEL_INDEX_DESCRIPTION <- as.factor(fire_data$ALARM_LEVEL_INDEX_DESCRIPTION)
 fire_data$HIGHEST_ALARM_LEVEL <- as.factor(fire_data$HIGHEST_ALARM_LEVEL)
-fire_data$INCIDENT_CLASSIFICATION_GROUP <- as.factor(fire_data$INCIDENT_CLASSIFICATION_GROUP)
+
 fire_data$VALID_INCIDENT_RSPNS_TIME_INDC <- as.factor(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
-fire_data$INCIDENT_CLASSIFICATION <- as.factor(fire_data$INCIDENT_CLASSIFICATION)
 levels(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)<- c("N", "Y")
 
-# alarm_box location is a little bit difficult to model it is better to focus in the big area
+fire_data$INCIDENT_CLASSIFICATION_GROUP <- as.factor(fire_data$INCIDENT_CLASSIFICATION_GROUP)
+fire_data$INCIDENT_CLASSIFICATION <- as.factor(fire_data$INCIDENT_CLASSIFICATION)
+
+# ALARM_BOX_LOCATION is a little bit difficult to model it is better to focus in the big area
 ```
 
 
@@ -88,25 +90,119 @@ Now we want to know how many INCIDENT_CLASSIFICATION class are summarized in eac
 print(ctable(fire_data$INCIDENT_CLASSIFICATION, fire_data$INCIDENT_CLASSIFICATION_GROUP), method = 'render')
 ```
 
-```{r}
-#for (incident in levels(fire_data$INCIDENT_CLASSIFICATION_GROUP)) {
-  #sub <- subset(fire_data, fire_data$INCIDENT_CLASSIFICATION_GROUP == incident)
-  #factorial_counts <- table(sub$INCIDENT_CLASSIFICATION)
 
-  # Extract non-zero levels and their counts
-  #non_zero_levels <- names(factorial_counts[factorial_counts != 0])
-  #cat("INCIDENT GROUP: ", incident, "\n")
-  #cat("INCIDENT:": non_zero_levels)
-  #cat("\n\n")
-#}
+```{r}
+for (variable in levels(fire_data$INCIDENT_CLASSIFICATION_GROUP)) {
+  non_zero_table <- table(subset(fire_data, INCIDENT_CLASSIFICATION_GROUP == variable)$INCIDENT_CLASSIFICATION)
+  cat(variable, "\n")
+  print(non_zero_table[non_zero_table != 0])
+  cat("\n")
+}
+
 ```
+
+
+
 As we can see from the upper table all the INCIDENT_CLASSIFICATION_GROUP have a unique set of INCIDENT_CLASSIFICATION 
 
+
+## See if there is a pattern with the NA/invaid values
+
+First of all we check if the distribution of invalid VALID_INCIDENT_RSPNS_TIME_INDC is more or less uniform across all the neighborhoods
+```{r}
+summary(fire_data$VALID_INCIDENT_RSPNS_TIME_INDC)
+```
+
+```{r}
+table(fire_data$INCIDENT_BOROUGH)
+```
+
+```{r}
+non_valid_inc_resp <- subset(fire_data, VALID_INCIDENT_RSPNS_TIME_INDC == "N")
+table(non_valid_inc_resp$INCIDENT_BOROUGH)
+```
+
+```{r}
+table(non_valid_inc_resp$INCIDENT_BOROUGH) / table(fire_data$INCIDENT_BOROUGH)
+```
+
+More or less all the neighborhoods have the same distribution of invalid valid_inc_resp_time_indc
+
+
+Now we want to check some other aspects of the data, for example the NA values of the DISTRICT columns, let's summarize the data again
+
+```{r}
+summary(fire_data)
+```
+
+```{r}
+na_locations <- subset(fire_data, is.na(ZIPCODE) | is.na(POLICEPRECINCT) | is.na(CITYCOUNCILDISTRICT) | is.na(COMMUNITYDISTRICT) |  is.na(COMMUNITYSCHOOLDISTRICT) |  is.na(CONGRESSIONALDISTRICT))
+print(dfSummary(na_locations, 
+                varnumbers   = FALSE, 
+                valid.col    = FALSE, 
+                graph.magnif = 0.76),
+                method = 'render')
+```
+
+```{r}
+table(na_locations$INCIDENT_BOROUGH) / table(fire_data$INCIDENT_BOROUGH)
+```
+
+```{r}
+table(na_locations$INCIDENT_CLASSIFICATION_GROUP) / table(fire_data$INCIDENT_CLASSIFICATION_GROUP)
+```
+
+This is interesting, we see that about the 43% of the NonMedical MFAs INCIDENT_CLASSIFICATION_GROUP are NA whereas the other classes have lower percentage. We can try to investigate this phenomena.
+
+
+```{r}
+fd_nm_mfa_cl <- table(subset(fire_data, INCIDENT_CLASSIFICATION_GROUP == "NonMedical MFAs")$INCIDENT_CLASSIFICATION)
+fd_nm_mfa_bro <- table(subset(fire_data, INCIDENT_CLASSIFICATION_GROUP == "NonMedical MFAs")$INCIDENT_BOROUGH)
+
+fd_nm_mfa_cl <- fd_nm_mfa_cl[fd_nm_mfa_cl != 0]
+fd_nm_mfa_cl
+```
+
+
+```{r}
+na_nm_mfa_cl <- table(subset(na_locations, INCIDENT_CLASSIFICATION_GROUP == "NonMedical MFAs")$INCIDENT_CLASSIFICATION)
+na_nm_mfa_bro <- table(subset(na_locations, INCIDENT_CLASSIFICATION_GROUP == "NonMedical MFAs")$INCIDENT_BOROUGH)
+
+na_nm_mfa_cl <- na_nm_mfa_cl[names(fd_nm_mfa_cl)]
+na_nm_mfa_cl
+```
+Here we can see that the majority of observation that at least one location attributes to NA have a response equal to Non-Medical MFA - ERS
+
+
+
+```{r}
+na_nm_mfa_cl / fd_nm_mfa_cl
+```
+So the 97% of all the Non-Medical MFA - ERS observations in the entire dataset have one of the location attribute equal to NA
+
+```{r}
+na_nm_mfa_bro / fd_nm_mfa_bro
+```
+And from here we can see that about the 78% of the observations that are NonMedical - MFAs that have at least one district column attribute to NA are from the RICHMOND / STATEN ISLAND.
+Also BRONX has about half of the NonMedical - MFAs observations that have at least one district column to NA.
+
+
+
+
+```{r}
+print(summary(subset(fire_data, VALID_INCIDENT_RSPNS_TIME_INDC == "N")$INCIDENT_RESPONSE_SECONDS_QY))
+print(summary(fire_data$INCIDENT_RESPONSE_SECONDS_QY))
+```
+Here we can see that all the observation NA observation to the INCIDENT_RESPONSE_SECONDS_QY has the respective VALID_INCIDENT_RSPNS_TIME_INDC value to N
+
+
+
+## Removing all the NA and unuseful columns from the dataset
 
 Remove some columns
 ```{r}
 fire_data = subset(fire_data, select = -c(
-  STARFIRE_INCIDENT_ID, ALARM_BOX_BOROUGH, INCIDENT_CLASSIFICATION,
+  STARFIRE_INCIDENT_ID, ALARM_BOX_BOROUGH, INCIDENT_CLASSIFICATION, ALARM_BOX_LOCATION,
   VALID_DISPATCH_RSPNS_TIME_INDC, DISPATCH_RESPONSE_SECONDS_QY,
   FIRST_ASSIGNMENT_DATETIME, FIRST_ACTIVATION_DATETIME, FIRST_ON_SCENE_DATETIME, INCIDENT_CLOSE_DATETIME 
 ))
@@ -115,35 +211,10 @@ fire_data = subset(fire_data, select = -c(
 
 Rename all the columns with a shorter and usable name
 ```{r}
-names(fire_data) <- c("fire_datetime", "AL_number", "AL_loction", "incident_brough", "zip", "Pprecint", "citycouncil_dist", "community_dist", "comm_school_dist", "congressional_dist", "alarm_source_desc", "alarm_level_idx", "highest_alarm_lev", "incident_class", "valid_inc_resp_time_indc", "incident_resp_sec", "incident_travel_time_sec", "engines_assigned", "ladders_assigned", "other_utits_assigned")
+names(fire_data) <- c("fire_datetime", "AL_loction", "incident_brough", "zip", "Pprecint", "citycouncil_dist", "community_dist", "comm_school_dist", "congressional_dist", "alarm_source_desc", "alarm_level_idx", "highest_alarm_lev", "incident_class", "valid_inc_resp_time_indc", "incident_resp_sec", "incident_travel_time_sec", "engines_assigned", "ladders_assigned", "other_utits_assigned")
 names(fire_data)
 ```
 
-
-See the relation with the nan values, check if there is some patter or not
-```{r}
-summary(fire_data$valid_inc_resp_time_indc)
-```
-
-```{r}
-table(fire_data$incident_brough)
-```
-
-
-
-```{r}
-non_valid_inc_resp <- subset(fire_data, valid_inc_resp_time_indc == "N")
-table(non_valid_inc_resp$incident_brough)
-```
-
-```{r}
-table(non_valid_inc_resp$incident_brough) / table(fire_data$incident_brough)
-```
-
-More or less all the neighbours have the same distribution of NA values respect the valid_inc_resp_time_indc columns
-
-
-Removing all the NA from the dataset
 ```{r}
 # Select the observations with the valid_inc_resp_time_indc set to Y
 fire_data <- subset(fire_data, valid_inc_resp_time_indc == "Y")
