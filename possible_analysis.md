@@ -187,7 +187,14 @@ results
 
 ## Lab 12: Subset Selection and Stepwise Regression
 ### Best Subset Selection
+1. regfit.full <- regsubsets(Salary ~ . , Hitters)
+2. regsubsets(Salary ~ ., data = Hitters, nvmax = 19)
+
 ### Stepwise Regression
+1. regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = "forward")
+2. regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = "backward")
+3. regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = "seqrep")
+4. General stepwise regression is implemented in function step that works also with generalized linear models differently from regsubsets that is designed for linear models only. Function step uses AIC for model selection
 
 ## Lab 13: Shrinkage Estimation
 ### Ridge Regression, Lasso, Shrinkage in Classification
@@ -218,9 +225,148 @@ In fact, glmnetUtils deliberately avoids the usual treatment of factors with a r
 In the above example, glmnet and glmnetUtils identify the same model because the categorical predictor Europe is not relevant. Obviously, there could be substantial differences between the results obtained with the two packages when there are significant categorical predictors.
 
 ## Lab 16: Principal Component Analysis
+1. pr.out <- prcomp(USArrests, scale = TRUE)
+2. names(pr.out) -> "sdev" "rotation" "center" "scale" "x"
+3. The center and scale components are the means and standard deviations of the original variables
+4. The componentpr.out$rotation contains the so-called rotation matrix. The columns of the rotation matrix are the principal component loading vectors
+4. scores are contained in the component pr.out$x
+5. biplot(pr.out, scale = 0) -> The biplot with the loadings and the scores is obtained with function biplot
+The argument scale = 0 “ensures that the arrows are scaled to represent the loadings
+6. pr.out contains the explained standard deviation of each principal component
+7. pr.var / sum(pr.var) -> proportion of variance explained by each principal component
+
+### Hard Imputation of Missing Values
 
 ## Lab 17: Visualization of Principal Components
+1. Principal component analysis is now run on the subset of the data given by the first 23 rows (“active individuals”) and the first 10 columns (“active variables”)
+```{r}
+decathlon2.active <- decathlon2[1:23, 1:10]
+res.pca <- prcomp(decathlon2.active, scale = TRUE)
+```
+
+The screeplot can be drawn using factoextra with fviz_eig()
+```{r}
+fviz_eig(res.pca)
+```
+
+2. The individuals can be visualized with respect to two principal components using  fviz_pca_ind()
+```{r}
+fviz_pca_ind(res.pca, col.ind = "cos2",  gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE)
+```
+3. The position of the variables with respect to two principal components can be visualized with  fviz_pca_var()
+4. The contributions of the variables to each component can be visualized with  fviz_contrib()
+```{r}
+fviz_contrib(res.pca, choice = "var", axes = 1) axes = 2, axes = 3 ....
+```
+5.  biplot of individuals and variables is drawn with funciton fviz_pca_biplot with the variable and individual colours specified through arguments col.var and col.ind, respectively
 
 ## Lab 18: Dimensionality Reduction Models
+### Principal Component Regression
+1. ```{r} pcr.fit <- pcr(Salary ~ ., data = Hitters, scale = TRUE, validation = "CV")```
+
+Argument scale = TRUE means that the predictors are standardized before computing the principal components, while argument validation = CV indicates that the test error is estimated with ten-fold cross-validation for each principal component
+
+2. We can visualize the cross-validated mean square errors using function validationplot with argument val.type = “MSEP”
+```{r} validationplot(pcr.fit, val.type = "MSEP") ```
+
+3. We now perform principal component regression on the training data and then evaluate the test set performance
+```{r}
+pcr.fit <- pcr(Salary ~ ., data = Hitters, subset = train, scale = TRUE, validation = "CV")
+validationplot(pcr.fit, val.type = "MSEP")
+```
+
+4. 
+```{r}
+pcr.pred <- predict(pcr.fit, x[test, ], ncomp = 5)
+mean((pcr.pred - y.test)^2)
+```
+
+5. PCR is more difficult to interpret than ridge and lasso because the PCR solution is written in terms of linear combinations of the underlying predictors. Furthermore, PCR does not perform variable selection.
+
+### Partial Least Squares
+1. pls.fit <- plsr(Salary ~ ., data = Hitters, subset = train, scale = TRUE, validation = "CV")
 
 ## Lab 19: Nonlinear Regression
+1. Polynomial regression models can be conveniently fitted with function poly. For example, we can predict wage with a fourth-degree polynomial in age
+```{r} lm(wage ~ poly(age, 4), data = Wage) ```
+Orthogonal polynomial whose elements are linear combinations of the variables age, age ^ 2, age ^ 3 and age ^ 4. Alternatively, function poly can be called with option raw = TRUE to produce the polynomial without orthogonalization.
+
+The estimated coefficients depend on the particular specification of the polynomial (orthogonal or not), but the fitted values are the same.
+
+2. Polynomial logistic regression for the indicator of high earners
+
+3. 
+```{r}
+## compute model-based predictions
+preds <- predict(mod, newdata = list(age = age.grid), se = TRUE)
+## transform predictions into the probability scale
+pfit <- exp(preds$fit) / (1 + exp(preds$fit))
+## confidence bands -- logit scale 
+bands.logit <- cbind(preds$fit + 2 * preds$se.fit, preds$fit - 2 * preds$se.fit)
+## confidence bands -- probability scale
+bands <- exp(bands.logit) / (1  + exp(bands.logit))
+preds <- predict(mod, newdata = list(age = age.grid), type = "response", se = TRUE)
+## draw the fitted values
+plot(age.grid, pfit, lwd = 2, col = "blue", type = "l", ylim = c(0, 1))
+## and add the prediction bands
+matlines(age.grid, bands, lwd = 1, col = "blue", lty = 3)
+```
+
+### Step Functions
+1. Step functions can be built with function cut that divides the range of a variable into given number of intervals
+
+2. By default, cut divides the range into intervals of the same size. However, it is possible also to specify the cutpoints using argument breaks
+
+3. Chosen so that the intervals cover the same proportion of data
+
+4. Piecewise constants model corresponds to linear regression with the categorized predictor identified by the cutpoints
+
+
+### Splines
+1. Regression splines can be fitted with functions bs and ns from package splines
+2. bs generates the matrix of basis functions for splines with a specified set of knots. By default, bs produces a cubic spline
+lm(wage ~ bs(age, knots = c(25, 40, 60)), data = Wage)
+3. Cubic spline with three knots for a total of six basis functions, that is seven degrees of freedom used by the spline (intercept + six basis functions).
+4. Natural splines can be fitted with function ns
+lm(wage ~ ns(age, df = 4), data = Wage)
+5.  Function smooth.spline can be used to fit smoothing splines with the number of degrees of freedom either prespecified or selected via cross-validation
+with(Wage, smooth.spline(age, wage, cv = TRUE))
+
+
+## Lab 20: Generalized Additive Models
+1. lm(wage ~ ns(year, 4) + ns(age, 5) + education, data = Wage)
+2. The fitted generalized additive model can be conveniently represented with effect plots from package effects
+```{r}
+plot(effect("ns(year, 4)", fit.gam))
+plot(effect("ns(age, 5)", fit.gam))
+plot(effect("education", fit.gam))
+```
+3. Generalized additive models are perhaps more commonly built with smoothing splines. Since smoothing splines are not expressed with basis functions, then it is necessary to use the dedicated function gam from package gam
+4. gam(wage ~ s(year, 4) + s(age, 5) + education, data = Wage)
+5. We consider a logistic additive model for classification of high earners using nonlinear functions of year and age
+```{r}
+gam(I(wage > 250) ~ s(year, 4) + s(age, 5) + education, family = binomial, data = Wage) 
+AIC(fit.gam4, fit.gam5)
+BIC(fit.gam4, fit.gam5)
+plot(fit.gam5, se = TRUE, col = "blue", lwd = 2)
+with(Wage, table(education, I(wage > 250)))
+```
+6. the logistic additive model is refitted excluding category `< HS Grad’
+gam(I(wage > 250) ~ year + s(age, 5) + education, data = Wage, family = binomial, subset = (education !="1. < HS Grad"))
+
+
+## Lab 21: The mgcv Package
+1. The gam function of mgcv “by default estimation of the degree of smoothness of model terms is part of model fitting” 
+2. Function gam of package mgcv has the same syntax of package gam
+3. gam(wage ~ s(year) + s(age) + education, data = Wage)
+4. Function predict can be used to compute model-based predictions. For example the expected wage for a 50-years old worker with an advanced degree in 2010 is:
+```{r}
+predict(fit.mgcv, newdata = data.frame(year = 2010, age = 50, education = "5. Advanced Degree"), se.fit = TRUE)
+## approximate 95% prediction interval
+pred$fit - 1.96 * pred$se.fit; pred$fit + 1.96 * pred$se.fit
+```
+
+## Lab 22: The mgcv Package - part 2
+1. 
+
+## Lab 23: Poisson Regression
