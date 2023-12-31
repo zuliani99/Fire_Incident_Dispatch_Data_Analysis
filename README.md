@@ -29,7 +29,7 @@ model <- svm(TargetVariable ~ ., data = train_data)
 5. **Gradient Boosting**
 library(xgboost)
 model <- xgboost(data = as.matrix(train_data), label = train_data$TargetVariable, nrounds = 100)
-```
+``
 
 6. **K-Nearest Neighbors (KNN)**
 
