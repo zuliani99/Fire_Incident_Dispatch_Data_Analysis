@@ -370,3 +370,9 @@ pred$fit - 1.96 * pred$se.fit; pred$fit + 1.96 * pred$se.fit
 1. 
 
 ## Lab 23: Poisson Regression
+
+## Lab 24: Quasi-Poisson Regression
+
+## Lab 25: Negative Binomial Regression
+
+## Lab 26: Generalized Additive Models for Counts
