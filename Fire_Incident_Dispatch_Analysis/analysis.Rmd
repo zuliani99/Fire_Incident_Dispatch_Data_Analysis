@@ -18,6 +18,7 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 library(nnet)
 #library(jmv)
 library(summarytools)
+library(lubridate)
 #library(ggplot2)
 ```
 
@@ -89,7 +90,9 @@ Now we want to know how many INCIDENT_CLASSIFICATION class are summarized in eac
 ```{r}
 print(ctable(fire_data$INCIDENT_CLASSIFICATION, fire_data$INCIDENT_CLASSIFICATION_GROUP), method = 'render')
 ```
+As we can see from the upper table all the INCIDENT_CLASSIFICATION_GROUP have a unique set of INCIDENT_CLASSIFICATION 
 
+At this point to be more clear we display each main class with each respective sub-class and then we meke a little description.
 
 ```{r}
 for (variable in levels(fire_data$INCIDENT_CLASSIFICATION_GROUP)) {
@@ -103,7 +106,10 @@ for (variable in levels(fire_data$INCIDENT_CLASSIFICATION_GROUP)) {
 
 
 
-As we can see from the upper table all the INCIDENT_CLASSIFICATION_GROUP have a unique set of INCIDENT_CLASSIFICATION 
+**Medical Emergency**:
+1. *Medical - Assist Civilian*
+
+
 
 
 ## See if there is a pattern with the NA/invaid values
@@ -203,7 +209,7 @@ Remove some columns
 ```{r}
 fire_data = subset(fire_data, select = -c(
   STARFIRE_INCIDENT_ID, ALARM_BOX_BOROUGH, INCIDENT_CLASSIFICATION, ALARM_BOX_LOCATION,
-  VALID_DISPATCH_RSPNS_TIME_INDC, DISPATCH_RESPONSE_SECONDS_QY,
+  VALID_DISPATCH_RSPNS_TIME_INDC, DISPATCH_RESPONSE_SECONDS_QY, 
   FIRST_ASSIGNMENT_DATETIME, FIRST_ACTIVATION_DATETIME, FIRST_ON_SCENE_DATETIME, INCIDENT_CLOSE_DATETIME 
 ))
 ```
@@ -227,6 +233,13 @@ print(dfSummary(fire_data,
                 graph.magnif = 0.76),
                 method = 'render')
 ```
+
+Remove the VALID_INCIDENT_RSPNS_TIME_INDC column
+```{r}
+fire_data = subset(fire_data, select = -c(valid_inc_resp_time_indc))
+```
+
+
 
 ## Merging factor
 
@@ -280,27 +293,52 @@ fire_data$alarm_source_desc <- fire_data$alarm_source_desc_new
 fire_data$alarm_source_desc_new <- NULL
 ```
 
-```{r}
-print(dfSummary(fire_data, 
-                varnumbers   = FALSE, 
-                valid.col    = FALSE, 
-                graph.magnif = 0.76),
-                method = 'render')
-```
-
 Check the distribution of the classes
 ```{r}
 round(summary(fire_data$incident_class) / nrow(fire_data), digits = 4)
 ```
 
 
+## Process datetime
+Here we extract the date number and the moment in which the fire happened divided into "Night", "Morning", "Afternoon" and "Evening"
 
-Train test split
 ```{r}
-sample <- sample(c(TRUE, FALSE), nrow(fire_data), replace=TRUE, prob=c(0.8,0.2))
-fire_data.train <- fire_data[sample, ]
-fire_data.test <- fire_data[!sample, ]
-fire_data.test <- subset(fire_data.test, select = -incident_class)
+process_fire_datetime <- function(input_df) {
+
+  # Process datetime column
+  input_df$fire_datetime <- mdy_hms(input_df$fire_datetime)
+  
+  # Create new columns for day number and time of day
+  input_df$day_number <- as.factor(day(input_df$fire_datetime))
+  input_df$time_of_day <- cut(
+    hour(input_df$fire_datetime),
+    breaks = c(0, 6, 12, 18, 24),
+    labels = c("Night", "Morning", "Afternoon", "Evening"),
+    include.lowest = TRUE,
+    right = TRUE
+  )
+  
+  input_df$fire_datetime <- NULL
+  
+  return(input_df)
+}
+
+fire_data_new <- process_fire_datetime(fire_data)
+
+print(dfSummary(fire_data_new, 
+                varnumbers   = FALSE, 
+                valid.col    = FALSE, 
+                graph.magnif = 0.76),
+                method = 'render')
+```
+
+
+## Train test split
+```{r}
+sample <- sample(c(TRUE, FALSE), nrow(fire_data_new), replace=TRUE, prob=c(0.8,0.2))
+fire_data.train <- fire_data_new[sample, ]
+fire_data.test <- fire_data_new[!sample, ]
+#fire_data.test <- subset(fire_data.test, select = -incident_class)
 dim(fire_data.train)
 dim(fire_data.test)
 ```
@@ -311,7 +349,11 @@ Check the distribution of the class in the train set
 ```{r}
 round(summary(fire_data.train$incident_class) / nrow(fire_data.train), digits = 4)
 ```
-The distribution is pretty similar to the previous one, more over if we consider separately the each main incident category we will end with three dataset with one of the three having the majority of the observations.
+
+
+
+
+
 
 ## TODO
 1. Know the meaning of the incident class -> fatto basta guardare la tabella riassuntiva
@@ -326,37 +368,121 @@ The distribution is pretty similar to the previous one, more over if we consider
 
 # Molutinomial Logistic Regression
 ```{r}
-#mod = multinom(incident_class ~ engines_assigned + ladders_assigned + incident_resp_sec + incident_brough + alarm_source_desc, data = fire_data.train, family = "binomial")
-
-#multi_nom_1 = multinom(incident_class ~ incident_resp_sec, data = fire_data.train, model=TRUE)
-#summary(multi_nom_1)
-```
-
-```{r}
-# Check the Z-score for the model (wald Z)
-#z <- summary(multi_nom_1)$coefficients/summary(multi_nom_1)$standard.errors
-#z
-```
-
-```{r}
-# 2-tailed z test
-#p <- (1 - pnorm(abs(z), 0, 1)) * 2
-#p
+pValue_extract <- function(x){
+  z <- summary(x)$coefficients/summary(x)$standard.errors
+  # 2-tailed Wald z tests to test significance of coefficients
+  p <- (1 - pnorm(abs(z), 0, 1)) * 2
+  p
+}
 ```
 
 
 ```{r}
-# Test the goodness of fit
-#chisq.test(fire_data.train$incident_class,predict(multi_nom_1))
+multi.fit1 <- multinom(incident_class ~ ., data = fire_data.train, trace = FALSE)
 ```
 
 ```{r}
-#exp(coef(multi_nom_1))
+table(preds = multi.preds1 <- predict(multi.fit1, newdata = fire_data.test), true = fire_data.test$incident_class)
 ```
 
 ```{r}
-#library(summarytools)
-#ctable <- table(fire_data.train$incident_class,predict(multi_nom_1))
-#ctable
+multi.fit1$AIC
+```
+```{r}
+mean(multi.preds1 == fire_data.test$incident_class)
+```
+
+```{r}
+#pValue_extract(multi.fit1)
+```
+
+
+
+
+Try a new model with less predictors
+```{r}
+multi.fit2 <- update(multi.fit1, . ~ . - AL_loction - zip - Pprecint - citycouncil_dist - community_dist - comm_school_dist - congressional_dist - day_number)
+multi.fit2$AIC
+```
+
+```{r}
+table(preds = multi.preds2 <- predict(multi.fit2, newdata = fire_data.test), true = fire_data.test$incident_class)
+```
+
+
+```{r}
+mean(multi.preds2 == fire_data.test$incident_class)
+```
+
+```{r}
+summary(multi.fit2, wald = TRUE)
+```
+
+```{r}
+#pValue_extract(multi.fit2)
+```
+
+
+## Linear Discriminant Analysis
+Now consider linear discriminant analysis:
+```{r}
+library("MASS")
+lda.fit <- lda(formula(multi.fit2), data = fire_data.train)
+lda.fit
+```
+Prediction:
+```{r}
+lda.preds <- predict(lda.fit, newdata = fire_data.test)
+``` 
+
+```{r}
+table(preds = lda.preds$class, true = fire_data.test$incident_class)
+```
+The accuracy of linear discriminant analysis is worse respect to the multinomial logistic regression:
+```{r}
+mean(lda.preds$class == fire_data.test$incident_class)
+```
+
+
+Now consider quadratic discriminant analysis:
+
+
+
+## Naive Bayes
+```{r}
+library("e1071")
+nb.fit <- naiveBayes(formula(multi.fit2), data = fire_data.train)
+```
+Prediction:
+```{r}
+nb.preds <- predict(nb.fit, newdata = fire_data.test, type = "class")
+``` 
+
+```{r}
+table(preds = nb.preds, true = fire_data.test$incident_class)
+```
+The accuracy of linear discriminant analysis is worse respect to the multinomial logistic regression:
+```{r}
+mean(nb.preds == fire_data.test$incident_class)
+```
+
+## K-Nearest Neighbours
+```{r}
+x.train <- model.matrix(~ incident_brough + alarm_source_desc + alarm_level_idx + 
+    highest_alarm_lev + incident_resp_sec + incident_travel_time_sec + 
+    engines_assigned + ladders_assigned + other_utits_assigned + 
+    time_of_day, data = fire_data.train)[, -1]
+x.test <- model.matrix(~ incident_brough + alarm_source_desc + alarm_level_idx + 
+    highest_alarm_lev + incident_resp_sec + incident_travel_time_sec + 
+    engines_assigned + ladders_assigned + other_utits_assigned + 
+    time_of_day, data = fire_data.test)[, -1]
+library("class")
+set.seed(98765)
+rates <- double(30)
+for (i in 1:30) {
+  tmp <- knn(train = x.train, test = x.test, cl = fire_data.train$incident_class, k = i)
+  rates[i] <- mean(tmp == fire_data.test$incident_class)
+}
+plot(x = (1:30), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
 ```
 
