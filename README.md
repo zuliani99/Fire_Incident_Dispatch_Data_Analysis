@@ -30,7 +30,9 @@ model <- svm(TargetVariable ~ ., data = train_data)
 library(xgboost)
 model <- xgboost(data = as.matrix(train_data), label = train_data$TargetVariable, nrounds = 100)
 ```
+
 6. **K-Nearest Neighbors (KNN)**
+
 ```{r}
 library(class)
 model <- knn(train = train_data[, predictors], test = test_data[, predictors], cl = train_data$TargetVariable, k = 5)
