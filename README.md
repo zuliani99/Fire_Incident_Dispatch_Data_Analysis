@@ -26,10 +26,13 @@ model <- randomForest(TargetVariable ~ ., data = train_data)
 library(e1071)
 model <- svm(TargetVariable ~ ., data = train_data)
 ```
+
 5. **Gradient Boosting**
+```{r}
 library(xgboost)
 model <- xgboost(data = as.matrix(train_data), label = train_data$TargetVariable, nrounds = 100)
 ```
+
 6. **K-Nearest Neighbors (KNN)**
 ```{r}
 library(class)
