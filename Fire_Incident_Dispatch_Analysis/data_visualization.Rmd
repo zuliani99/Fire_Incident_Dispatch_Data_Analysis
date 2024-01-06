@@ -23,6 +23,11 @@ library(sf)
 library(geojsonio)
 library(leaflet) 
 library(broom)
+library(plotly)
+
+
+#library(devtools)
+#install_github('ramnathv/rCharts')
 ```
 
 
@@ -36,7 +41,7 @@ firefighter_stations <- read.csv("datasets/fdny-firehouse-listing.csv")
 fire_data$ALARM_BOX_NUMBER <- as.character(fire_data$ALARM_BOX_NUMBER)
 fire_data$INCIDENT_BOROUGH <- as.factor(fire_data$INCIDENT_BOROUGH)
  
-fire_data <- fire_data %>% rename(al_number = ALARM_BOX_NUMBER, borough = INCIDENT_BOROUGH)
+fire_data <- fire_data %>% rename(al_number = ALARM_BOX_NUMBER, borough = INCIDENT_BOROUGH, al_location = ALARM_BOX_LOCATION, incident_class = INCIDENT_CLASSIFICATION_GROUP)
 
 firefighter_stations$Borough <- as.factor(firefighter_stations$Borough)
 firefighter_stations <- firefighter_stations %>% rename(borough = Borough)
@@ -75,7 +80,7 @@ firefighter_stations <- na.omit(firefighter_stations)
 
 ```{r}
 alarm_inc_count <- fire_data_merged %>%
-                    group_by(al_number, lat, lon) %>%
+                    group_by(al_number, lat, lon, al_location) %>%
                     summarise(Count = n()) %>%
                     rename(incident_count = Count)
 
@@ -139,8 +144,24 @@ mapview(list(alarm_inc_count_sdf, geojson_newyork),
         homebutton = list(TRUE, TRUE),
         layer.name = list("incident_count", "brorough"),
         alpha.regions = list(0.7, 0.4), 
-        aplha = list(1, 1))
+        aplha = list(1, 0.5))
 ```
 
+
+
+```{r}
+
+sub <- fire_data_new %>%
+            group_by(borough, incident_class) %>%
+            summarise(Count = n()) %>%
+            rename(incidents_number = Count)
+
+
+fig <- plot_ly(sub, x = ~borough, y = ~incident_class, type = 'bar', name = 'S Fire')
+fig <- fig %>% add_trace(y = ~count, name = 'LA Zoo')
+fig <- fig %>% layout(yaxis = list(title = 'Count'), barmode = 'group')
+
+fig
+```
 
 
