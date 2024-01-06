@@ -1,0 +1,146 @@
+---
+title: "DataVisualization - Fire Incident Dispatch Data Analysis"
+author: "Zuliani Riccardo"
+date: "5/1/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
+```
+# Dataset
+I use the fire incident dispach from opendata of NewYork
+
+# Loading Packages
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+library(mapview)
+library(sf)
+library(geojsonio)
+library(leaflet) 
+library(broom)
+```
+
+
+```{r}
+fire_data <- read.csv("Fire_Incident_Dispatch_Data_last_50k.csv")
+alarm_box_loc <- read.csv("Alarm_Box_Locations.csv")
+firefighter_stations <- read.csv("fdny-firehouse-listing.csv")
+```
+
+```{r}
+fire_data$ALARM_BOX_NUMBER <- as.character(fire_data$ALARM_BOX_NUMBER)
+fire_data$INCIDENT_BOROUGH <- as.factor(fire_data$INCIDENT_BOROUGH)
+ 
+fire_data <- fire_data %>% rename(al_number = ALARM_BOX_NUMBER, borough = INCIDENT_BOROUGH)
+
+firefighter_stations$Borough <- as.factor(firefighter_stations$Borough)
+firefighter_stations <- firefighter_stations %>% rename(borough = Borough)
+
+alarm_box_loc_new <- alarm_box_loc %>% select(BOROBOX, LATITUDE, LONGITUDE) %>% 
+                        rename(al_number = BOROBOX, lat = LATITUDE, lon = LONGITUDE)
+
+fire_data <- fire_data %>%
+  mutate(al_number = str_pad(al_number, width = 4, pad = "0"))
+
+```
+
+
+
+
+```{r}
+fire_data_new <- fire_data %>%
+  mutate(al_number = case_when(
+    borough == "BRONX" ~ paste0("X", al_number),
+    borough == "BROOKLYN" ~ paste0("B", al_number),
+    borough == "MANHATTAN" ~ paste0("M", al_number),
+    borough == "QUEENS" ~ paste0("Q", al_number),
+    borough == "RICHMOND / STATEN ISLAND" ~ paste0("R", al_number),
+    TRUE ~ al_number
+  ))
+```
+
+
+```{r}
+fire_data_merged <- merge(fire_data_new, alarm_box_loc_new, by = "al_number", all.x = TRUE)
+
+fire_data_merged <- na.omit(fire_data_merged)
+firefighter_stations <- na.omit(firefighter_stations)
+```
+
+
+```{r}
+alarm_inc_count <- fire_data_merged %>%
+                    group_by(al_number, lat, lon) %>%
+                    summarise(Count = n()) %>%
+                    rename(incident_count = Count)
+
+alarm_inc_count_sdf <- st_as_sf(alarm_inc_count, coords = c("lon", "lat"), crs = 4326)
+```
+
+
+```{r}
+count_inc_brough <- count(fire_data_merged, borough)
+count_inc_brough <- count_inc_brough %>% rename(incident_count = n)
+count_inc_brough <- count_inc_brough %>% mutate(borough = recode_factor(borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan", "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"))
+count_inc_brough
+```
+
+
+```{r}
+firefighter_stations <- firefighter_stations %>% rename(lat = Latitude, lon = Longitude)
+firefighter_stations_sdf <- st_as_sf(firefighter_stations, coords = c("lon", "lat"), crs = 4326)
+head(firefighter_stations_sdf)
+```
+
+
+
+
+
+Downloand of the GEO JSON
+
+
+
+```{r}
+geojson_newyork <- geojson_read("NYC_BoroughBoundaries.geojson",  what = "sp")
+geojson_newyork <- setNames(geojson_newyork, c("borough_code", "borough", "shape_area", "shape_leng"))
+geojson_newyork$borough <- as.factor(geojson_newyork$borough)
+geojson_newyork$borough_code <- NULL
+head(geojson_newyork)
+```
+
+
+
+
+
+```{r}
+geojson_newyork@data = data.frame(geojson_newyork@data, count_inc_brough[match(geojson_newyork@data$borough, count_inc_brough$borough),])
+geojson_newyork@data$borough.1 <- NULL
+```
+
+
+
+```{r}
+mapview(list(firefighter_stations_sdf, geojson_newyork),
+        zcol = list(NULL, "incident_count"),
+        legend = list(FALSE, TRUE),
+        homebutton = list(FALSE, TRUE), layer.name = list(NULL, "indicents_number"), alpha.regions = 0.5, aplha = 1)
+```
+
+
+```{r}
+mapview(list(alarm_inc_count_sdf, geojson_newyork),
+        zcol = list("incident_count", "borough"),
+        legend = list(TRUE, TRUE),
+        homebutton = list(TRUE, TRUE),
+        layer.name = list("incident_count", "brorough"),
+        alpha.regions = list(0.7, 0.4), 
+        aplha = list(1, 1))
+```
+
+
+

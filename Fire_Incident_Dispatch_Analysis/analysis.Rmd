@@ -38,12 +38,17 @@ Read the restricted dataset of last 50k observation form the original 10.000.000
 ```{r read_data, cache=TRUE}
 fire_data <- read.csv("Fire_Incident_Dispatch_Data_last_50k.csv")
 
+head(fire_data)
+```
+
+```{r}
 print(dfSummary(fire_data, 
                 varnumbers   = FALSE, 
                 valid.col    = FALSE, 
                 graph.magnif = 0.76),
                 method = 'render')
 ```
+
 
 ## Check column before deleting them
 
