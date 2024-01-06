@@ -106,7 +106,7 @@ Downloand of the GEO JSON
 
 
 ```{r}
-geojson_newyork <- geojson_read("NYC_BoroughBoundaries.geojson",  what = "sp")
+geojson_newyork <- geojson_read("datasets/NYC_BoroughBoundaries.geojson",  what = "sp")
 geojson_newyork <- setNames(geojson_newyork, c("borough_code", "borough", "shape_area", "shape_leng"))
 geojson_newyork$borough <- as.factor(geojson_newyork$borough)
 geojson_newyork$borough_code <- NULL
