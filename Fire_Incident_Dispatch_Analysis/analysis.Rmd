@@ -36,7 +36,7 @@ Read the restricted dataset of last 50k observation form the original 10.000.000
 
 
 ```{r read_data, cache=TRUE}
-fire_data <- read.csv("Fire_Incident_Dispatch_Data_last_50k.csv")
+fire_data <- read.csv("datases/Fire_Incident_Dispatch_Data_last_50k.csv")
 
 head(fire_data)
 ```
