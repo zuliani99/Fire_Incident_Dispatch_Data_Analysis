@@ -25,6 +25,11 @@ library(leaflet)
 library(broom)
 library(plotly)
 
+#library(rmapzen)
+#options(RMAPZEN_SEARCH_HOST = "geosearch.planninglabs.nyc")
+#Sys.setenv("MAPZEN_KEY" = NA)
+#mz_set_search_host_nyc_geosearch()
+
 
 #library(devtools)
 #install_github('ramnathv/rCharts')
@@ -40,6 +45,7 @@ firefighter_stations <- read.csv("datasets/fdny-firehouse-listing.csv")
 ```{r}
 fire_data$ALARM_BOX_NUMBER <- as.character(fire_data$ALARM_BOX_NUMBER)
 fire_data$INCIDENT_BOROUGH <- as.factor(fire_data$INCIDENT_BOROUGH)
+fire_data$INCIDENT_CLASSIFICATION_GROUP <- as.factor(fire_data$INCIDENT_CLASSIFICATION_GROUP)
  
 fire_data <- fire_data %>% rename(al_number = ALARM_BOX_NUMBER, borough = INCIDENT_BOROUGH, al_location = ALARM_BOX_LOCATION, incident_class = INCIDENT_CLASSIFICATION_GROUP)
 
@@ -51,6 +57,9 @@ alarm_box_loc_new <- alarm_box_loc %>% select(BOROBOX, LATITUDE, LONGITUDE) %>%
 
 fire_data <- fire_data %>%
   mutate(al_number = str_pad(al_number, width = 4, pad = "0"))
+
+
+fire_data$total_unit_assigned <- fire_data$ENGINES_ASSIGNED_QUANTITY + fire_data$LADDERS_ASSIGNED_QUANTITY + fire_data$OTHER_UNITS_ASSIGNED_QUANTITY
 
 ```
 
@@ -88,11 +97,24 @@ alarm_inc_count_sdf <- st_as_sf(alarm_inc_count, coords = c("lon", "lat"), crs =
 ```
 
 
+
+```{r}
+stations_borough <- firefighter_stations %>%
+                    group_by(borough) %>%
+                    summarise(Count = n()) %>%
+                    rename(number_of_stations = Count)
+```
+
+
+
 ```{r}
 count_inc_brough <- count(fire_data_merged, borough)
 count_inc_brough <- count_inc_brough %>% rename(incident_count = n)
 count_inc_brough <- count_inc_brough %>% mutate(borough = recode_factor(borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan", "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"))
-count_inc_brough
+
+stations_borough$incident_per_station <- round(count_inc_brough$incident_count / stations_borough$number_of_stations, digits = 3)
+
+count_inc_brough <- merge(count_inc_brough, stations_borough, by="borough")
 ```
 
 
@@ -148,20 +170,97 @@ mapview(list(alarm_inc_count_sdf, geojson_newyork),
 ```
 
 
+distribution of incident per incident class
+```{r}
+alarm_inc_bor_class_count <- fire_data_new %>%
+                              group_by(incident_class, al_number, borough) %>%
+                              summarise(Count = n())
+
+ggplot(data=alarm_inc_bor_class_count, aes(x=borough, y=Count, fill=incident_class)) +
+    geom_bar(stat="identity", position=position_dodge())
+```
+
+
+
+```{r}
+ggplot(fire_data, aes(x = borough, y = INCIDENT_RESPONSE_SECONDS_QY, color = incident_class)) +  # ggplot function
+  geom_boxplot()
+```
+
+
+
+```{r}
+fire_data[which.max(fire_data$INCIDENT_RESPONSE_SECONDS_QY), ]
+```
+
+
+
+
+```{r}
+ggplot(fire_data, aes(x = borough, y = INCIDENT_TRAVEL_TM_SECONDS_QY, color = incident_class)) +  # ggplot function
+  geom_boxplot()
+```
+
+
+
+```{r}
+ggplot(fire_data, aes(x = borough, y = ENGINES_ASSIGNED_QUANTITY, color = incident_class)) +  # ggplot function
+  geom_boxplot()
+```
+
+```{r}
+fire_data %>% arrange(desc(ENGINES_ASSIGNED_QUANTITY)) %>% slice(1:2)
+```
+
+09/16/2023 06:59:35 PM, structural fires, source incident phone, url of the incident https://www.cbsnews.com/newyork/news/gravesend-brooklyn-fire-injuries/
+09/24/2023 12:05:21 AM, structural fires, source incident phone, url of the incident https://abc7ny.com/three-injured-in-fire-bedford-stuyvesant-beford-stuyvesant-brooklyn-fdny/13823430/
+
+```{r}
+ggplot(fire_data, aes(x = borough, y = LADDERS_ASSIGNED_QUANTITY, color = incident_class)) +  # ggplot function
+  geom_boxplot()
+```
+
+```{r}
+fire_data %>% arrange(desc(LADDERS_ASSIGNED_QUANTITY)) %>% slice(1:2)
+```
+
+Same incidents of before
+
+```{r}
+ggplot(fire_data, aes(x = borough, y = OTHER_UNITS_ASSIGNED_QUANTITY, color = incident_class)) +  # ggplot function
+  geom_boxplot()
+```
+
+```{r}
+fire_data %>% arrange(desc(OTHER_UNITS_ASSIGNED_QUANTITY)) %>% slice(1:2)
+```
+
+Same incidents of before
+
+
+
+```{r}
+ggplot(fire_data, aes(x = borough, y = total_unit_assigned, color = incident_class)) +  # ggplot function
+  geom_boxplot()
+```
+
+```{r}
+fire_data %>% arrange(desc(total_unit_assigned)) %>% slice(1:2)
+```
+
+Same incidents of before
+
+
 
 ```{r}
 
-sub <- fire_data_new %>%
-            group_by(borough, incident_class) %>%
-            summarise(Count = n()) %>%
-            rename(incidents_number = Count)
+source_al_borough_class <- fire_data %>%
+                            group_by(ALARM_SOURCE_DESCRIPTION_TX, incident_class, borough) %>%
+                            summarise(Count = n()) %>%
+                            rename(incidents_number = Count)
 
 
-fig <- plot_ly(sub, x = ~borough, y = ~incident_class, type = 'bar', name = 'S Fire')
-fig <- fig %>% add_trace(y = ~count, name = 'LA Zoo')
-fig <- fig %>% layout(yaxis = list(title = 'Count'), barmode = 'group')
-
-fig
+ggplot(source_al_borough_class, aes(x = borough, y = incidents_number, color = ALARM_SOURCE_DESCRIPTION_TX)) +  # ggplot function
+  geom_boxplot()
 ```
-
 
