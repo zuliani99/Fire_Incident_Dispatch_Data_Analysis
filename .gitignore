@@ -7,3 +7,4 @@
 *.geojson
 Fire_Incident_Dispatch_Analysis/analysis_cache/html/__packages
 *.png
+Fire_Incident_Dispatch_Analysis/FireIncidentDispatchAnalysis_cache_/html/__packages
