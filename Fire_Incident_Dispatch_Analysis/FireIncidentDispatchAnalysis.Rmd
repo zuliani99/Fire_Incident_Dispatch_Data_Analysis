@@ -109,19 +109,22 @@ print(dfSummary(fire_data,
                 valid.col    = FALSE, 
                 graph.magnif = 0.75),
                 method = 'render')
+#print(dfSummary(fire_data), method = 'render')
 ```
 
 Now we rename all the columns in order to be smaller whenever we plot graphs.
 ```{r}
 fire_data <- fire_data %>%
             rename(id = STARFIRE_INCIDENT_ID, datetime = INCIDENT_DATETIME, al_borough = ALARM_BOX_BOROUGH, al_number = ALARM_BOX_NUMBER, 
-                   al_location = ALARM_BOX_LOCATION, incident_borough = INCIDENT_BOROUGH, zipcode = ZIPCODE, pol_prec = POLICEPRECINCT,
-                   city_con_dist = CITYCOUNCILDISTRICT, comm_dist = COMMUNITYDISTRICT, comm_sc_dist = COMMUNITYSCHOOLDISTRICT, cong_dist = CONGRESSIONALDISTRICT,
-                    al_source_desc = ALARM_SOURCE_DESCRIPTION_TX, al_index_desc = ALARM_LEVEL_INDEX_DESCRIPTION, highest_al_level = HIGHEST_ALARM_LEVEL,
-                   incident_class = INCIDENT_CLASSIFICATION, incident_class_group = INCIDENT_CLASSIFICATION_GROUP, dispatch_resp_qy = DISPATCH_RESPONSE_SECONDS_QY,
-                   first_ass_datetime = FIRST_ASSIGNMENT_DATETIME, first_act_datetime = FIRST_ACTIVATION_DATETIME,  first_on_scene_datetime = FIRST_ON_SCENE_DATETIME,
-                   inc_close_datetime = INCIDENT_CLOSE_DATETIME, valid_disp_resp_rime_indc = VALID_DISPATCH_RSPNS_TIME_INDC, valid_incident_resp_time_indc = VALID_INCIDENT_RSPNS_TIME_INDC,
-                   inc_resp_sec_qy = INCIDENT_RESPONSE_SECONDS_QY, inc_travel_time_s_qy = INCIDENT_TRAVEL_TM_SECONDS_QY, engines_assigned = ENGINES_ASSIGNED_QUANTITY,
+                   al_location = ALARM_BOX_LOCATION, inc_borough = INCIDENT_BOROUGH, zipcode = ZIPCODE, pol_prec = POLICEPRECINCT,
+                   city_con_dist = CITYCOUNCILDISTRICT, commu_dist = COMMUNITYDISTRICT, commu_sc_dist = COMMUNITYSCHOOLDISTRICT,
+                   cong_dist = CONGRESSIONALDISTRICT, al_source_desc = ALARM_SOURCE_DESCRIPTION_TX, al_index_desc = ALARM_LEVEL_INDEX_DESCRIPTION,
+                   highest_al_level = HIGHEST_ALARM_LEVEL, inc_class = INCIDENT_CLASSIFICATION, inc_class_group = INCIDENT_CLASSIFICATION_GROUP,
+                   disp_resp_qy = DISPATCH_RESPONSE_SECONDS_QY, first_ass_datetime = FIRST_ASSIGNMENT_DATETIME,
+                   first_act_datetime = FIRST_ACTIVATION_DATETIME,  first_onscene_datetime = FIRST_ON_SCENE_DATETIME,
+                   inc_close_datetime = INCIDENT_CLOSE_DATETIME, disp_resp_time_indc = VALID_DISPATCH_RSPNS_TIME_INDC,
+                   inc_resp_sec_indc = VALID_INCIDENT_RSPNS_TIME_INDC, inc_resp_sec_qy = INCIDENT_RESPONSE_SECONDS_QY,
+                   inc_travel_sec_qy = INCIDENT_TRAVEL_TM_SECONDS_QY, engines_assigned = ENGINES_ASSIGNED_QUANTITY,
                    ladders_assigned = LADDERS_ASSIGNED_QUANTITY, others_units_assigned = OTHER_UNITS_ASSIGNED_QUANTITY)
 ```
 
@@ -135,59 +138,97 @@ Finally for convenience we convert the datetime that are currently a characters 
 
 ```{r}
 # set factorial
-fire_data$incident_borough <- as.factor(fire_data$incident_borough)
+fire_data$inc_borough <- as.factor(fire_data$inc_borough)
 fire_data$al_borough <- as.factor(fire_data$al_borough)
 fire_data$al_source_desc <- as.factor(fire_data$al_source_desc)
 fire_data$al_index_desc <- as.factor(fire_data$al_index_desc)
 fire_data$highest_al_level <- as.factor(fire_data$highest_al_level)
 
-fire_data$valid_disp_resp_rime_indc <- as.factor(fire_data$valid_disp_resp_rime_indc)
-levels(fire_data$valid_disp_resp_rime_indc)<- c("N", "Y")
+fire_data$disp_resp_time_indc <- as.factor(fire_data$disp_resp_time_indc)
+levels(fire_data$disp_resp_time_indc)<- c("N", "Y")
 
-fire_data$valid_incident_resp_time_indc <- as.factor(fire_data$valid_incident_resp_time_indc)
-levels(fire_data$valid_incident_resp_time_indc)<- c("N", "Y")
+fire_data$inc_resp_sec_indc <- as.factor(fire_data$inc_resp_sec_indc)
+levels(fire_data$inc_resp_sec_indc)<- c("N", "Y")
 
-fire_data$incident_class_group <- as.factor(fire_data$incident_class_group)
-fire_data$incident_class <- as.factor(fire_data$incident_class)
+fire_data$inc_class_group <- as.factor(fire_data$inc_class_group)
+fire_data$inc_class <- as.factor(fire_data$inc_class)
 ```
 
-Here we create the `day_number` predictor and the ``
+We note that the maximum level of the time indicator is very high to be considered as seconds so we decided to scale the two indicators in minutes.
 
 ```{r}
-process_fire_datetime <- function(input_df) {
+summary(fire_data %>% select(inc_resp_sec_qy, inc_travel_sec_qy))
+```
 
+```{r}
+fire_data$inc_resp_sec_qy <- fire_data$inc_resp_sec_qy / 60
+fire_data$inc_travel_sec_qy <- fire_data$inc_travel_sec_qy / 60
+fire_data <- fire_data %>% rename(inc_resp_min_qy = inc_resp_sec_qy, inc_travel_min_qy = inc_travel_sec_qy)
+```
+
+
+Here we create the `day_number`, `time_of_day` and `is_weekend`
+
+
+```{r}
+#fire_data$datetime <- as.POSIXct(fire_data$datetime, format="%m/%d/%Y %H:%M:%S")
+  
   # Process datetime column
-  input_df$datetime <- mdy_hms(input_df$datetime)
+fire_data$datetime <- mdy_hms(fire_data$datetime)
+fire_data$inc_close_datetime <- mdy_hms(fire_data$inc_close_datetime)
   
-  # Create new columns for day number,  time of day and is weekend 
-  input_df$day_number <- as.factor(day(input_df$datetime))
+# Create new columns for day number,  time of day and is weekend 
+fire_data$day_number <- as.factor(day(fire_data$datetime))
   
-  input_df$time_of_day <- cut(
-    hour(input_df$datetime),
+fire_data$day_type <- as.factor(ifelse(weekdays(fire_data$datetime) %in% c("sabato", "domenica"), "Weekend", "Weekday"))
+  
+fire_data$ticket_time <- difftime(fire_data$inc_close_datetime, fire_data$datetime, units="mins")
+  
+fire_data$time_of_day <- cut(
+    hour(fire_data$datetime),
     breaks = c(0, 6, 12, 18, 24),
     labels = c("Night", "Morning", "Afternoon", "Evening"),
     include.lowest = TRUE,
     right = TRUE
-  )
+)
   
-  input_df <- input_df %>%
-  mutate(is_weekend = ifelse(weekdays(datetime) %in% c("Saturday", "Sunday"), TRUE, FALSE))
-  
-  input_df$datetime <- NULL
-  
-  return(input_df)
-}
-
-fire_data <- process_fire_datetime(fire_data)
+fire_data$datetime <- NULL
 ```
 
 
 ```{r}
-# set posix dates
-fire_data$first_on_scene_datetime <- as.POSIXct(fire_data$first_on_scene_datetime, format="%m/%d/%Y %H:%M:%S %p")
+table(fire_data$day_number)
+```
+
+```{r}
+table(fire_data$time_of_day)
+```
+
+```{r}
+table(fire_data$day_type)
+```
+
+Here we add a new predictor that is the sum of all the type of assigned units.
+
+```{r}
+fire_data$total_assigned_unit <- fire_data$engines_assigned + fire_data$ladders_assigned + fire_data$others_units_assigned
+```
+
+
+Set the dates to POSIX data type
+
+```{r}
+fire_data$first_onscene_datetime <- as.POSIXct(fire_data$first_onscene_datetime, format="%m/%d/%Y %H:%M:%S %p")
 fire_data$first_ass_datetime <- as.POSIXct(fire_data$first_ass_datetime, format="%m/%d/%Y %H:%M:%S %p")
 fire_data$first_act_datetime <- as.POSIXct(fire_data$first_act_datetime, format="%m/%d/%Y %H:%M:%S %p")
 fire_data$inc_close_datetime <- as.POSIXct(fire_data$inc_close_datetime, format="%m/%d/%Y %H:%M:%S %p")
+```
+
+
+Rename the factor levels for the `inc_borough` predictor.
+
+```{r}
+fire_data <- fire_data %>% mutate(inc_borough = recode_factor(inc_borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan", "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"))
 ```
 
 
@@ -260,16 +301,16 @@ print(dfSummary(fire_data,
 
 
 
-The next step is to deal with NA value and delete some unusefull predictors.
+The next step is to deal with NA value and delete some un-useful predictors.
 
 
-First of all we saw the possibility that al_boroug and incident_borough are actually the same column.
+First of all we saw the possibility that `al_borough` and `inc_borough` are actually the same column.
 
 
 ```{r}
-identical(fire_data$al_borough, fire_data$incident_borough)
+identical(fire_data$al_borough, fire_data$inc_borough)
 ```
-The column al_borough and incident_borough have the same sequence of values, so we can delete one of the two.
+The column ``al_borough` and `inc_borough` have the same sequence of values, so we can delete one of the two.
 
 ```{r}
 fire_data <- fire_data %>% select(-c(al_borough))
@@ -277,46 +318,167 @@ fire_data <- fire_data %>% select(-c(al_borough))
 
 
 
-Then we say that all observation in the dataset have the valid_disp_resp_rime_indc equal to N, let's check again and in ffermative case we can delete both columns 
+Then we say that all observation in the dataset have the `disp_resp_time_indc` equal to *N*, let's check again and in affermative case we can delete both columns.
 
 ```{r}
-summary(fire_data$valid_disp_resp_rime_indc)
+summary(fire_data$disp_resp_time_indc)
 ```
-All our observations have non valid valid_disp_resp_rime_indc so we can delete both the column indicator and the respective column quantity inc_travel_time_s_qy
+All our observations have non valid `disp_resp_time_indc` so we can delete both the column indicator and the respective column quantity `inc_travel_min_qy`
 
 ```{r}
-fire_data <- fire_data %>% select(-c(valid_disp_resp_rime_indc, inc_travel_time_s_qy))
+fire_data <- fire_data %>% select(-c(disp_resp_time_indc, inc_travel_min_qy))
 ```
 
 
 
-Now we do a quick check also on the other indindicetor variable
+Now we do a quick check also on the other indicator variable `inc_resp_sec_indc`
 
 ```{r}
-summary(fire_data$valid_incident_resp_time_indc)
+summary(fire_data$inc_resp_sec_indc)
 ```
-But here we have some observations with valid valid_incident_resp_time_indc, and we will condier only the valid one deleting the one that has a non valid attribute.
+But here we have some observations with valid `inc_resp_sec_indc`, and we will consider only the valid one deleting the one that has a non valid attribute.
 
-
-
-Now we want to know how many incident_class are summarized in each incident_class_group.
+However before doing that let's be sure that the distribution of `inc_resp_min_qy` around the borough.
 
 ```{r}
-print(ctable(fire_data$incident_class, fire_data$incident_class_group), method = 'render')
+ggplot(data=fire_data %>% group_by(inc_borough, inc_resp_sec_indc) %>% summarise(incident_number = n()), 
+       aes(x=inc_borough, y=incident_number, fill=inc_resp_sec_indc)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  geom_text(aes(label=incident_number), vjust=1.6, color="white",
+            position = position_dodge(0.9), size=3.5) +
+  scale_fill_brewer(palette="Paired") +
+  labs(title = "Incident Count - Borouh - Valid Response Time in Minutes", x = "Borough", y = "Incident Number", fill = "Valid Response\n Time in Minutes") +
+  theme_gray()
 ```
 
-As we can see from the upper table all the incident_class_group have a unique set of v 
+And to the rateo of valid `inc_resp_sec_indc` in each borough is:
+
+```{r}
+print(fire_data %>% group_by(inc_borough, inc_resp_sec_indc) %>% summarise(incident_number = n()) %>% mutate(ratio=incident_number/sum(incident_number))) %>% filter(inc_resp_sec_indc == "Y")
+```
+
+
+
+```{r}
+ggplot(fire_data, aes(total_assigned_unit, inc_resp_min_qy)) + 
+  geom_point(aes(colour = inc_resp_sec_indc))+
+   labs(title = "Total Assigned Units - Response Time In Minutes", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Valid Response\n Time in Minutes") +
+  theme_gray()
+```
+
+```{r}
+ggplot(fire_data %>% filter(inc_resp_sec_indc == "N")
+            , aes(total_assigned_unit, inc_resp_min_qy)) + 
+  geom_point(aes(colour = inc_class_group)) +
+  labs(title = "Total Assigned Units - Response Time In Minutes - Incidnet Class Group", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Incident Class Groups") +
+  theme_gray()
+```
+
+
+
+```{r}
+print(fire_data %>% 
+        filter(inc_resp_sec_indc == "N", inc_class_group == "Medical Emergencies", total_assigned_unit == 1) %>%
+        group_by(inc_borough) %>%
+        summarise(incident_number = n()))
+
+print(fire_data %>% 
+        filter(inc_resp_sec_indc == "N", inc_class_group == "Medical Emergencies", total_assigned_unit != 1) %>%
+        group_by(inc_borough) %>%
+        summarise(incident_number = n()))
+
+print(fire_data %>% 
+        filter(inc_resp_sec_indc == "N", inc_class_group == "Medical Emergencies", total_assigned_unit == 1) %>%
+        group_by(inc_class) %>%
+        summarise(incident_number = n()))
+```
+
+```{r fig.height = 5, fig.width = 15}
+ggplot(data=fire_data %>% 
+        filter(inc_resp_sec_indc == "N", inc_class_group == "Medical Emergencies", total_assigned_unit == 1) %>%
+        group_by(inc_class, inc_borough) %>%
+        summarise(incident_number = n()), 
+       aes(x=inc_borough, y=incident_number, fill=inc_class)) + geom_bar(stat="identity", position=position_dodge()) +
+        geom_text(aes(label=incident_number), vjust=1.6, color="black",
+                  position = position_dodge(0.9), size=3) +
+        #scale_fill_brewer(palette="Paired") +
+        labs(title = "Borough - Incident Counts - Incident Class Group", x = "Borough", y = "Incident Counts", fill = "Incident Class Group") +
+        theme_grey()
+```
+
+
+We have concluded that the observations having `inc_resp_sec_indc == "N", inc_class_group == "Medical Emergencies", total_assigned_unit == 1` are mostly identified as **Medical - EMS Link 10-91** and **Medical - PD Link 10-91**.
+
+1. **10-91 Medical Emergency EMS** - Fire Unit Not Required - To be transmitted through borough dispatcher by the responding unit when the fire Unit is canceled enroute due to EMS on scene, or EMS downgrades the job to a segment that does not require a Fire Unit response. Note: This signal shall be used only for medical emergency incidents. EMS stands for *Emergency Medical Services*.
+
+2. **10-91 Medical Emergency PD** - Fire Unit Not Required - To be transmitted through borough dispatcher by the responding unit when the fire Unit is canceled enroute due to PD on scene, or PD downgrades the job to a segment that does not require a Fire Unit response. Note: This signal shall be used only for medical emergency incidents. PD stands for *Police Department*.
+
+
+For and additional proof we can see also the relation with the `al_source_desc`.
+
+```{r}
+ggplot(fire_data %>% filter(inc_resp_sec_indc == "N")
+            , aes(total_assigned_unit, inc_resp_min_qy)) +
+  geom_point(aes(colour = factor(al_source_desc))) +
+  labs(title = "Total Assigned Units - Response Time In Minutes - Alarm Source", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Alarm Source") +
+  theme_gray()
+```
+
+And as expected the higher number of `inc_resp_min_qy` is from the `al_source_desc` equal to EMS and EMS-911. Whereas for the higher number of total assigned units and lower response time the majority of incident were reported by phone call.
+
+
+Now we can look for the NonMedical Emergencies.
+
+
+
+```{r}
+print(fire_data %>% 
+        filter(inc_resp_sec_indc == "N", inc_class_group == "NonMedical Emergencies") %>%
+        group_by(inc_class) %>%
+        summarise(incident_number = n()))
+```
+```{r}
+ggplot(data=fire_data %>% 
+          filter(inc_resp_sec_indc == "N", inc_class_group == "NonMedical Emergencies", inc_class == "Assist Civilian - Non-Medical") %>%
+          group_by(inc_borough) %>%
+          summarise(incident_number = n()), 
+        aes(x=inc_borough, y=incident_number)) + 
+      geom_bar(stat="identity", position=position_dodge()) +
+      geom_text(aes(label=incident_number), vjust=1.6, color="white", position = position_dodge(0.9), size=3.5) +
+      #scale_fill_brewer(palette="Paired") +
+      labs(title = "Incident Count - Borouh - Valid Response Time in Second", x = "Borough", y = "Incident Count") +
+      theme_minimal()
+```
+
+Where as the majority of non valid `inc_resp_sec_indc` that are Non-Medical Emergency are from the incident class equal to Assist Civilian - Non-Medical.
+
+
+
+For stake of consistency we will consider only the valid observations that have `inc_resp_sec_indc == "Y"`.
+
+```{r}
+fire_data <- fire_data %>% filter(inc_resp_sec_indc == "Y")
+dim(fire_data)
+```
+
+
+Now we want to know how many `incident_class` are summarized in each incident_class_group.
+
+```{r}
+print(ctable(fire_data$inc_class, fire_data$inc_class_group), method = 'render')
+```
+
+As we can see from the upper table all the `inc_class_group` have a unique set of values.
 
 At this point to be more clear we display each main class with each respective sub-class.
 
 ```{r}
-for (variable in levels(fire_data$incident_class_group)) {
-  non_zero_table <- table(subset(fire_data, incident_class_group == variable)$incident_class)
+for (variable in levels(fire_data$inc_class_group)) {
+  non_zero_table <- table(subset(fire_data, inc_class_group == variable)$inc_class)
   cat(variable, "\n")
   print(non_zero_table[non_zero_table != 0])
   cat("\n")
 }
-
 ```
 
 
@@ -329,46 +491,323 @@ First things first let's recap the number of NA values for each columns
 colSums(is.na(fire_data))
 ```
 
-TODO:
-1. check assigned units
-2. check location predictiors
-3. check first_on_scene_datetime and inc_resp_sec_qy 
+### Checking the location predictors
 
+Here we will check if there is a pattern on the absence of values in the following predictors: `zipcode`, `pol_prec`, `city_con_dist`, `commu_dist`, `commu_sc_dist` and `cong_dist`.
 
-
-
-First of all we check if the distribution of invalid `valid_incident_resp_time_indc` is more or less uniform across all the borough.
 ```{r}
-summary(fire_data$valid_incident_resp_time_indc)
+na_locations <- fire_data %>%
+  filter(is.na(zipcode) | is.na(pol_prec) | is.na(city_con_dist) | is.na(commu_dist) | is.na(commu_sc_dist) | is.na(cong_dist))
+```
+
+
+```{r fig.height = 5, fig.width = 10}
+ggplot(data=na_locations %>% 
+        group_by(inc_class_group, inc_borough) %>%
+        summarise(incident_number = n()), 
+       aes(x=inc_borough, y=incident_number, fill=inc_class_group)) + geom_bar(stat="identity", position=position_dodge()) +
+        geom_text(aes(label=incident_number), vjust=1.6, color="black",
+                  position = position_dodge(0.9), size=3.5) +
+        #scale_fill_brewer(palette="Paired") +
+        labs(title = "NA location", x = "Borough", y = "Incident Count", fill = "Incident Class Group") +
+        theme_grey()
 ```
 
 ```{r}
-table(fire_data$incident_borough)
+table(na_locations$inc_borough) / table(fire_data$inc_borough)
 ```
 
 ```{r}
-non_valid_inc_resp <- fire_data %>%  filter(valid_incident_resp_time_indc == "N")
+table(na_locations$inc_class_group) / table(fire_data$inc_class_group)
+```
+
+So around the 40% of the whole incident that are of the incident class group NonMedical MFAs have at least one of the location columns to NA. Let's investigate.
+
+
+```{r}
+fd_nm_mfa_cl <- table(subset(fire_data, inc_class_group == "NonMedical MFAs")$inc_class)
+fd_nm_mfa_bro <- table(subset(fire_data, inc_class_group == "NonMedical MFAs")$inc_borough)
+
+fd_nm_mfa_cl <- fd_nm_mfa_cl[fd_nm_mfa_cl != 0]
+fd_nm_mfa_cl
+```
+
+
+```{r}
+na_nm_mfa_cl <- table(subset(na_locations, inc_class_group == "NonMedical MFAs")$inc_class)
+na_nm_mfa_bro <- table(subset(na_locations, inc_class_group == "NonMedical MFAs")$inc_borough)
+
+na_nm_mfa_cl <- na_nm_mfa_cl[names(fd_nm_mfa_cl)]
+na_nm_mfa_cl
+```
+
+
+
+```{r}
+na_nm_mfa_cl / fd_nm_mfa_cl
+```
+So the 97% of all the Non-Medical MFA - ERS observations in the entire dataset have one of the location attribute equal to NA
+
+```{r}
+na_nm_mfa_bro / fd_nm_mfa_bro
+```
+And from here we can see that about the 78% of the observations that are NonMedical - MFAs that have at least one district column attribute to NA are from the RICHMOND / STATEN ISLAND.
+Also BRONX has about half of the NonMedical - MFAs observations that have at least one district column to NA.
+
+
+
+### Checking the assigned units predictors
+
+```{r}
+print(fire_data %>%
+  filter(is.na(engines_assigned) | is.na(ladders_assigned) | is.na(others_units_assigned)) %>%
+  group_by(inc_borough, inc_class)) %>%
+  summarise(incident_count = n())
+```
+
+
+### Checking the first_act_datetime predictors
+
+```{r}
+na_first_act_datetime <- fire_data %>% filter(is.na(first_act_datetime))
+```
+
+```{r}
+print(na_first_act_datetime %>% group_by(inc_class, inc_borough) %>% summarise(incident_count = n()))
+```
+
+
+```{r}
+ggplot(data=na_first_act_datetime %>% 
+        group_by(inc_class_group, inc_borough) %>%
+        summarise(incident_number = n()), 
+       aes(x=inc_borough, y=incident_number, fill=inc_class_group)) + geom_bar(stat="identity", position=position_dodge()) +
+labs(title = "NA First Act Date", x = "Borough", y = "Incident Count", fill = "Incident Class Group") +
+  theme_minimal()
+
+```
+
+Seems to be random and thus there is no pattern that motivate the presence od na values in `first_act_datetime`.
+
+
+At this point we can omit the na values.
+
+```{r}
+fire_data <- na.omit(fire_data)
+```
+
+
+
+
+## Additional Data Visaulization
+
+In this section we plot additional data visualization focus on the geographical visualization of the New York borough with relative predictors. In order to do so we load two additional datasets:
+1. **Alarm_Box_Locations.csv** is a dataset that includes geographical informations about the alarm box, including *latitude* and *longitude* useful to plot points in a map.
+2. **fdny-firehouse-listing.csv** is a dataset that includes the geographical informations of every firefighter stations in the NYC, including again *latitude* and *longitude*.
+
+```{r}
+alarm_box_loc <- read.csv("datasets/Alarm_Box_Locations.csv")
+
+head(alarm_box_loc)
+```
+
+```{r}
+summary(alarm_box_loc)
+```
+
+
+```{r}
+firefighter_stations <- read.csv("datasets/fdny-firehouse-listing.csv")
+
+head(firefighter_stations)
+```
+
+```{r}
+summary(firefighter_stations)
+```
+
+
+We now start with the firefighter stations dataset.
+
+```{r}
+
+# make a copy of the fire_data
+fire_data_for_ffs <- fire_data
+
+fire_data_for_ffs <- fire_data_for_ffs %>% rename(borough = inc_borough)
+
+firefighter_stations$Borough <- as.factor(firefighter_stations$Borough)
+firefighter_stations <- firefighter_stations %>% rename(borough = Borough)
+
+# remove the na values
+firefighter_stations <- na.omit(firefighter_stations)
+```
+
+
+
+```{r}
+stations_borough <- firefighter_stations %>%
+                    group_by(borough) %>%
+                    summarise(number_of_stations = n())
+```
+
+
+```{r}
+count_inc_brough <- fire_data_for_ffs %>% group_by(borough) %>% summarise(incident_count = n())
+
+stations_borough$incident_per_station <- round(count_inc_brough$incident_count / stations_borough$number_of_stations, digits = 3)
+
+count_inc_brough <- merge(count_inc_brough, stations_borough, by="borough")
+```
+
+```{r}
+firefighter_stations <- firefighter_stations %>% rename(lat = Latitude, lon = Longitude)
+firefighter_stations_sdf <- st_as_sf(firefighter_stations, coords = c("lon", "lat"), crs = 4326)
+head(firefighter_stations_sdf)
+```
+
+
+Downloand of the GEO JSON
+
+```{r}
+geojson_newyork <- geojson_read("datasets/NYC_BoroughBoundaries.geojson",  what = "sp")
+geojson_newyork <- setNames(geojson_newyork, c("borough_code", "borough", "shape_area", "shape_leng"))
+geojson_newyork$borough <- as.factor(geojson_newyork$borough)
+geojson_newyork$borough_code <- NULL
+head(geojson_newyork)
+```
+
+
+```{r}
+geojson_newyork@data = data.frame(geojson_newyork@data, count_inc_brough[match(geojson_newyork@data$borough, count_inc_brough$borough),])
+geojson_newyork@data$borough.1 <- NULL
+```
+
+
+```{r}
+mapview(list(firefighter_stations_sdf, geojson_newyork),
+        zcol = list(NULL, "incident_count"),
+        legend = list(FALSE, TRUE),
+        homebutton = list(FALSE, TRUE), layer.name = list(NULL, "indicents_number"), alpha.regions = 0.5, aplha = 1)
+```
+
+
+
+distribution of incident per incident class
+```{r fig.height = 5, fig.width = 10}
+ggplot(data=fire_data %>% group_by(inc_class_group, inc_borough) %>%  summarise(incident_count = n()), 
+       aes(x=inc_borough, y=incident_count, fill=inc_class_group)) +
+    geom_bar(stat="identity", position=position_dodge()) +
+    geom_text(aes(label=incident_count), vjust=1.6, color="black",
+              position = position_dodge(0.9), size=2.5) +
+    #scale_fill_brewer(palette="Paired") +
+    labs(title = "Borough - Incident Count - Incident Class Group", x = "Borough", y = "Incident Count", fill = "Incident Class Group") +
+  theme_minimal()
+```
+
+
+
+```{r fig.height = 5, fig.width = 8}
+ggplot(fire_data, aes(x = inc_borough, y = inc_resp_min_qy, color = inc_class_group)) +  # ggplot function
+  geom_boxplot() + scale_color_brewer(palette="Dark2") +
+  labs(title = "Borough - Incident Class Group - Valid Response Time in Minutes", x = "Borough", y = "Valid Response Time in Minutes", color = "Incident Class Group") +
+  theme_grey()
+```
+
+
+
+```{r}
+fire_data[which.max(fire_data$inc_resp_min_qy), ]
+```
+
+
+
+
+
+
+
+
+```{r fig.height = 5, fig.width = 8}
+ggplot(fire_data, aes(x = inc_borough, y = engines_assigned, color = inc_class_group)) +  # ggplot function
+  geom_boxplot() +
+  labs(title = "Borough - Engine Assigned - Incident Class Group", x = "Borough", y = "Engine Assigned", color = "Incident Class Group")
   
-table(non_valid_inc_resp$incident_borough)
 ```
 
 ```{r}
-table(non_valid_inc_resp$incident_borough) / table(fire_data$incident_borough)
+fire_data %>% arrange(desc(engines_assigned)) %>% slice(1:2)
 ```
 
-More or less all the neighborhoods have the same distribution of invalid `valid_inc_resp_time_indc`.
+09/16/2023 06:59:35 PM, structural fires, source incident phone, url of the incident https://www.cbsnews.com/newyork/news/gravesend-brooklyn-fire-injuries/
+09/24/2023 12:05:21 AM, structural fires, source incident phone, url of the incident https://abc7ny.com/three-injured-in-fire-bedford-stuyvesant-beford-stuyvesant-brooklyn-fdny/13823430/
+
+```{r fig.height = 5, fig.width = 8}
+ggplot(fire_data, aes(x = inc_borough, y = ladders_assigned, color = inc_class_group)) +  # ggplot function
+  geom_boxplot() +
+  labs(title = "Borough - Ladders Assigned - Incident Class Group", x = "Borough", y = "Engine Assigned", color = "Incident Class Group")
+```
+
+```{r}
+fire_data %>% arrange(desc(ladders_assigned)) %>% slice(1:2)
+```
+
+Same incidents of before
+
+```{r fig.height = 5, fig.width = 8}
+ggplot(fire_data, aes(x = inc_borough, y = others_units_assigned, color = inc_class_group)) +  # ggplot function
+  geom_boxplot() +
+  labs(title = "Borough - Other Units Assigned - Incident Class Group", x = "Borough", y = "Other Units Assigned", color = "Incident Class Group")
+```
+
+```{r}
+fire_data %>% arrange(desc(others_units_assigned)) %>% slice(1:2)
+```
+
+Same incidents of before
 
 
 
+```{r fig.height = 5, fig.width = 8}
+ggplot(fire_data, aes(x = inc_borough, y = total_assigned_unit, color = inc_class_group)) +  # ggplot function
+  geom_boxplot() + 
+  labs(title = "Borough - Total Units Assigned - Incident Class Group", x = "Borough", y = "Total Units Assigned", color = "Incident Class Group")
+```
+
+```{r}
+fire_data %>% arrange(desc(total_assigned_unit)) %>% slice(1:2)
+```
+
+Same incidents of before
 
 
 
-## Data Visaulization
+```{r}
+ggplot(fire_data %>% group_by(al_source_desc, inc_class_group, inc_borough) %>% summarise(incidents_number = n()),
+       aes(x = inc_borough, y = incidents_number, color = al_source_desc)) +  # ggplot function
+  geom_boxplot() +
+  labs(title = "Borough - Incident Number - Alarm Source", x = "Borough", y = "Incident Number", color = "Alarm Source")
+```
+
+```{r}
+ggplot(fire_data %>% group_by(inc_class_group, inc_borough, day_type) %>% summarise(incidents_number = n()),
+       aes(x = inc_borough, y = incidents_number, color = day_type)) +
+  geom_boxplot()  +
+  labs(title = "Borouhg - Incident Count - Day Type", x = "Borough", y = "Incident Count", color = "Day Type")
+```
+
+
+```{r}
+ggplot(fire_data %>% group_by(inc_class_group, inc_borough, time_of_day) %>% summarise(incidents_number = n()),
+       aes(x = inc_borough, y = incidents_number, color = time_of_day)) +
+  geom_boxplot() +
+  labs(title = "Borough - Incident Count - Day Time", x = "Borough", y = "Incident Count", color = "Day Time")
+```
+
 
 
 # Let's build some models
 
-But before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaning 20% for the test set.
+But before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
 
 ```{r}
 sample <- sample(c(TRUE, FALSE), nrow(fire_data), replace=TRUE, prob=c(0.8,0.2))
@@ -378,5 +817,125 @@ dim(fire_data.train)
 dim(fire_data.test)
 ```
 
+
+# Molutinomial Logistic Regression
+```{r}
+pValue_extract <- function(x){
+  z <- summary(x)$coefficients/summary(x)$standard.errors
+  # 2-tailed Wald z tests to test significance of coefficients
+  p <- (1 - pnorm(abs(z), 0, 1)) * 2
+  p
+}
+```
+
+
+```{r}
+multi.fit1 <- multinom(incident_class ~ ., data = fire_data.train, trace = FALSE)
+```
+
+```{r}
+table(preds = multi.preds1 <- predict(multi.fit1, newdata = fire_data.test), true = fire_data.test$incident_class)
+```
+
+```{r}
+multi.fit1$AIC
+```
+```{r}
+mean(multi.preds1 == fire_data.test$incident_class)
+```
+
+```{r}
+#pValue_extract(multi.fit1)
+```
+
+
+
+
+Try a new model with less predictors
+```{r}
+multi.fit2 <- update(multi.fit1, . ~ . - AL_loction - zip - Pprecint - citycouncil_dist - community_dist - comm_school_dist - congressional_dist - day_number)
+multi.fit2$AIC
+```
+
+```{r}
+table(preds = multi.preds2 <- predict(multi.fit2, newdata = fire_data.test), true = fire_data.test$incident_class)
+```
+
+
+```{r}
+mean(multi.preds2 == fire_data.test$incident_class)
+```
+
+```{r}
+summary(multi.fit2, wald = TRUE)
+```
+
+```{r}
+#pValue_extract(multi.fit2)
+```
+
+
+# Linear Discriminant Analysis
+Now consider linear discriminant analysis:
+```{r}
+library("MASS")
+lda.fit <- lda(formula(multi.fit2), data = fire_data.train)
+lda.fit
+```
+Prediction:
+```{r}
+lda.preds <- predict(lda.fit, newdata = fire_data.test)
+``` 
+
+```{r}
+table(preds = lda.preds$class, true = fire_data.test$incident_class)
+```
+The accuracy of linear discriminant analysis is worse respect to the multinomial logistic regression:
+```{r}
+mean(lda.preds$class == fire_data.test$incident_class)
+```
+
+
+Now consider quadratic discriminant analysis:
+
+
+
+# Naive Bayes
+```{r}
+library("e1071")
+nb.fit <- naiveBayes(formula(multi.fit2), data = fire_data.train)
+```
+Prediction:
+```{r}
+nb.preds <- predict(nb.fit, newdata = fire_data.test, type = "class")
+``` 
+
+```{r}
+table(preds = nb.preds, true = fire_data.test$incident_class)
+```
+The accuracy of linear discriminant analysis is worse respect to the multinomial logistic regression:
+```{r}
+mean(nb.preds == fire_data.test$incident_class)
+```
+
+# K-Nearest Neighbours
+```{r}
+x.train <- model.matrix(~ incident_brough + alarm_source_desc + alarm_level_idx + 
+    highest_alarm_lev + incident_resp_sec + incident_travel_time_sec + 
+    engines_assigned + ladders_assigned + other_utits_assigned + 
+    time_of_day, data = fire_data.train)[, -1]
+x.test <- model.matrix(~ incident_brough + alarm_source_desc + alarm_level_idx + 
+    highest_alarm_lev + incident_resp_sec + incident_travel_time_sec + 
+    engines_assigned + ladders_assigned + other_utits_assigned + 
+    time_of_day, data = fire_data.test)[, -1]
+library("class")
+set.seed(98765)
+rates <- double(30)
+for (i in 1:30) {
+  tmp <- knn(train = x.train, test = x.test, cl = fire_data.train$incident_class, k = i)
+  rates[i] <- mean(tmp == fire_data.test$incident_class)
+}
+plot(x = (1:30), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
+```
 
 
