@@ -25,7 +25,8 @@ if (!require("e1071")) install.packages("e1071")
 if (!require("class")) install.packages("class")
 if (!require("leaps")) install.packages("leaps")
 if (!require("glmnet")) install.packages("glmnet")
-#if (!require("plm")) install.packages("plm")
+if (!require("car")) install.packages("car")
+if (!require("caTools")) install.packages("caTools")
 
 if (!require("summarytools")) install.packages("summarytools")
 if (!require("dplyr")) install.packages("dplyr")
@@ -45,7 +46,8 @@ library(e1071)
 library(class)
 library(leaps)
 library(glmnet)
-#library(plm)
+library(car)
+library(caTools)
 
 library(summarytools)
 library(dplyr)
@@ -154,7 +156,9 @@ As we can see from the summary there are many `NA` values, and many predictors t
 
 In addition we will add he predictor for the `day_number`, a factorial predictor to indicate in the incident day is a week day or not `dat_type` and a factorial predictor `time_of_day` that indicates the range of time whenever the incident happens, so `Night` (if the hour is between 0 and 6), `Morning`  (if the hour is between 6 and 12), `Afternoon` (if the hour is between 12 and 18), `Evening`  (if the hour is between 18 and 24).
 
-Since we are dealing with datetime we also check if the differences (`inc_resp_sec_qy`, `inc_travel_sec_qy` and `disp_resp_sec_qy`) are actually corrects, if not we replace them with the correct one
+Since we are dealing with datetime we also check if the differences (`inc_resp_sec_qy`, `inc_travel_sec_qy` and `disp_resp_sec_qy`) are actually corrects, if not we replace them with the correct one.
+
+Finally we decided to add an additional time difference the `emergency_min_qy` which represents the difference between the `inc_close_datetime` and the `first_onscene_datetime`.
 
 
 ```{r factorial type}
@@ -175,7 +179,7 @@ fire_data$inc_class_group <- as.factor(fire_data$inc_class_group)
 fire_data$inc_class <- as.factor(fire_data$inc_class)
 ```
 
-Moreover we note that the maximum level of the time indicator is very high to be considered as seconds so we decided to scale the two indicators in minutes.
+Moreover we note that the maximum level of the time differences is very high to be considered as seconds so we decided to scale the two indicators in minutes.
 
 ```{r summary datetime predictors}
 summary(fire_data %>% select(inc_resp_sec_qy, inc_travel_sec_qy, disp_resp_sec_qy))
@@ -204,7 +208,7 @@ fire_data$first_onscene_datetime <- mdy_hms(fire_data$first_onscene_datetime)
 fire_data$inc_close_datetime <- mdy_hms(fire_data$inc_close_datetime)
 
 
-# checking if the differeces are well computed if not change with the correct one
+# checking if the differences are well computed if not change with the correct one
 
 if (!identical(fire_data$inc_resp_min_qy, as.numeric(difftime(fire_data$first_onscene_datetime, fire_data$datetime, units="mins")))){
   fire_data$inc_resp_min_qy <- as.numeric(difftime(fire_data$first_onscene_datetime, fire_data$datetime, units="mins"))
@@ -217,6 +221,9 @@ if (!identical(fire_data$inc_travel_min_qy, as.numeric(difftime(fire_data$first_
 if (!identical(fire_data$disp_resp_min_qy, as.numeric(difftime(fire_data$first_ass_datetime, fire_data$datetime, units="mins")))){
   fire_data$disp_resp_min_qy <- as.numeric(difftime(fire_data$first_ass_datetime, fire_data$datetime, units="mins"))
 }
+
+# creating emergency_min_qy which describe the time taken by the firefighter to close the emergency after have been arrived to the location 
+fire_data$emergency_min_qy <- as.numeric(difftime(fire_data$inc_close_datetime, fire_data$first_onscene_datetime, units="mins"))
 
 # creating day_type
 fire_data$day_type <- as.factor(ifelse(weekdays(fire_data$datetime) %in% c("sabato", "domenica"), "Weekend", "Weekday"))
@@ -383,10 +390,12 @@ Then we say that all observation in the dataset have the `disp_resp_min_indc` eq
 ```{r sumamry disp_resp_min_indc}
 summary(fire_data$disp_resp_min_indc)
 ```
-All our observations have non valid `disp_resp_min_indc` so we can delete both the column indicator and the respective column quantity `disp_resp_min_qy`
 
-```{r remove disp_resp_min_indc inc_travel_min_qy}
-fire_data <- fire_data %>% select(-c(disp_resp_min_indc, disp_resp_min_qy))
+
+All our observations have non valid `disp_resp_min_indc` so we could delete both the column indicator and the respective column quantity `disp_resp_min_qy`. However we note that also in the original dataset all the observation have the `disp_resp_min_indc` set to **N**, which is quite strange, and seems that is problem relative to the data acquisition, thus we decide to mantein this time difference.
+
+```{r remove al_borough}
+fire_data <- fire_data %>% select(-c(disp_resp_min_indc))
 ```
 
 
@@ -685,7 +694,8 @@ fire_data_new <- na.omit(fire_data)
 fire_data_new <- fire_data_new %>% select(-c(zipcode, pol_prec, city_con_dist, commu_dist, al_location,
                                              commu_sc_dist, cong_dist, first_ass_datetime, first_act_datetime,
                                              first_onscene_datetime, inc_close_datetime, inc_resp_min_indc, 
-                                             inc_class, id, al_number))
+                                             id, al_number, inc_class,))
+                                             #tua_is_one, total_assigned_unit)) 
 ```
 
 
@@ -743,21 +753,9 @@ ggplot(fire_data_new,
 
 ### Maps Visualization
 
-In this section we plot additional data visualization focus on the geographical visualization of the New York borough with relative predictors. In order to do so we load two additional datasets:
-1. **Alarm_Box_Locations.csv** is a dataset that includes geographical informations about the alarm box, including *latitude* and *longitude* useful to plot points in a map.
-2. **fdny-firehouse-listing.csv** is a dataset that includes the geographical informations of every firefighter stations in the NYC, including again *latitude* and *longitude*.
+In this section we plot additional data visualization focus on the geographical visualization of the New York borough with relative predictors. In order to do so we load an additional datasets:
 
-```{r read Alarm_Box_Locations.csv}
-alarm_box_loc <- read.csv("datasets/Alarm_Box_Locations.csv")
-
-# IF I WANT TO USE THIS I HAVE DO DELETE THE REMOVING STEP OF al_location UPPER 
-
-head(alarm_box_loc)
-```
-
-```{r summary alarm_box_loc}
-summary(alarm_box_loc)
-```
+The **fdny-firehouse-listing.csv** is a dataset that includes the geographical informations of every firefighter stations in the NYC, including again *latitude* and *longitude*.
 
 
 ```{r read fdny-firehouse-listing.csv}
@@ -815,7 +813,7 @@ head(firefighter_stations_sdf)
 
 #### Downloand of the geojson file 
 
-At this point we download the `.geojson` file that contaions all the geometry of each borough in order to have a cool maps visualization of NYC.
+At this point we download the `.geojson` file that contain all the geometry of each borough in order to have a cool maps visualization of NYC.
 
 ```{r geojson_newyork}
 geojson_newyork <- geojson_read("datasets/NYC_BoroughBoundaries.geojson",  what = "sp")
@@ -844,21 +842,210 @@ mapview(list(firefighter_stations_sdf, geojson_newyork),
 
 # Let's build some models
 
+
+As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_min_qy`, then the `emergency_min_qy` and finally the `ticket_time`. Previously we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+
+For all three analysis we transform the relative response in log scale in order to simulate the behaviour of the Exponential and Gamma GLMs.
+
+So first things first let's check if there are some observations that have at least one of the time differences equal to zero.
+
+```{r}
+summary(fire_data_new %>% select(disp_resp_min_qy, inc_travel_min_qy, inc_resp_min_qy, emergency_min_qy, ticket_time))
+```
+
+```{r}
+fire_data_new <- fire_data_new %>% filter(inc_travel_min_qy != 0, emergency_min_qy != 0)
+```
+
+
 But before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
 
 ```{r}
-sample <- sample(c(TRUE, FALSE), nrow(fire_data_new), replace=TRUE, prob=c(0.8,0.2))
-fire_data.train <- fire_data_new[sample, ]
-fire_data.test <- fire_data_new[!sample, ]
+#set.seed(43)
+
+split <- sample.split(fire_data_new, SplitRatio = 0.8)
+
+# Create training and testing sets
+fire_data.train <- subset(fire_data_new, split == TRUE)
+fire_data.test <- subset(fire_data_new, split == FALSE)
+
 dim(fire_data.train)
 dim(fire_data.test)
 ```
 
-As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_sec_qy` and the `ticket_time`. Previously we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+## Use emergency_min_qy as response
 
-## Use inc_resp_sec_qy as response
+In this section we use `inc_resp_min_qy` as response, so we have to remove all the time difference predictors that are computed with one of the two datetime that comes after the incident datetime, so all the other except for our actual response.
+
 
 ```{r}
+# make a copy of the train and test
+resp_min_fd.train <- fire_data.train
+resp_min_fd.test <- fire_data.test
 
+# remove the ticket_time
+resp_min_fd.train <- resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, total_assigned_unit))
+resp_min_fd.test <- resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, total_assigned_unit))
 ```
+
+
+We decided to remove also the `total_assigned_unit` since it is in linear relation with the three assigned units predictors since it is the sum of the three.
+
+Let's build our first Linear Regression Model
+
+```{r}
+lm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
+summary(lm_full)
+```
+
+
+```{r}
+qqPlot(residuals(lm_full))
+```
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_full)
+```
+
+The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is very close to zero.
+
+
+```{r}
+lm_full_upd <- update(lm_full, log(inc_resp_min_qy) ~ .)
+summary(lm_full_upd)
+```
+
+The $R^2$ has increase w.r.t. the previous model. Let's see the residual plots.
+
+```{r}
+residualPlots(lm_full_upd)
+qqPlot(residuals(lm_full_upd))
+influenceIndexPlot(lm_full_upd, vars = "Cook")
+summary(fitted(lm_full_upd))
+```
+
+
+Now given the updated full model we can run four model selection that we saw during this course.
+
+### Best Subset Regression
+
+This technique looks through all possible regression models of all different subset sizes and look for the best of each size. So it produces a sequence of models which is the best subset for each particular size.
+
+We specify the full number of available predictors by parameter `nvmax`, so we will get 1 subsets of each size up to 12 in this case.
+
+```{r}
+regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25)
+summ_regfit.full <- summary(regfit.full)
+summ_regfit.full
+```
+
+```{r}
+plot(summ_regfit.full$cp, xlab = "Number of variables", ylab = "Cp")
+title("Best Subset - log(inc_resp_min_qy)")
+min_cp <- which.min(summ_regfit.full$cp)
+points(min_cp, summ_regfit.full$cp[min_cp], pch=20, col="red")
+```
+
+There is also an interesting plot method for the regsubset object
+
+```{r}
+plot(regfit.full, scale="Cp")
+coef(regfit.full, min_cp)
+```
+
+
+
+Now we look into the three methods of best subset regression: **forward**, **backword** and **bidirectional elimination**.
+
+```{r}
+fw_regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25, method = "forward")
+summ_fw_regfit.full <- summary(fw_regfit.full)
+fw_min_cp <- which.min(summ_fw_regfit.full$cp)
+
+
+bk_regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25, method = "backward")
+summ_bk_regfit.full <- summary(bk_regfit.full)
+bk_min_cp <- which.min(summ_bk_regfit.full$cp)
+
+
+sw_regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25, method = "seqrep")
+summ_sw_regfit.full <- summary(sw_regfit.full)
+sw_min_cp <- which.min(summ_sw_regfit.full$cp)
+```
+
+
+```{r}
+par(mfrow = c(1, 3))
+plot(summ_fw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(fw_min_cp, summ_fw_regfit.full$cp[fw_min_cp], pch=20, col="red")
+
+plot(summ_bk_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(bk_min_cp, summ_bk_regfit.full$cp[bk_min_cp], pch=20, col="red")
+
+plot(summ_sw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(sw_min_cp, summ_sw_regfit.full$cp[sw_min_cp], pch=20, col="red")
+```
+
+
+Now we can try to make prediction using the best model of all the three methods.
+
+```{r}
+val.errors = rep(NA, 25)
+
+x.test = model.matrix(log(inc_resp_min_qy) ~ ., data = resp_min_fd.test)
+
+for (i in 1:25) {
+  coefi = coef(fw_regfit.full, id=i)
+  pred = x.test[,names(coefi)]%*%coefi
+  val.errors[i] = mean((log(resp_min_fd.test$inc_resp_min_qy) - pred)^2)
+}
+
+plot(sqrt(val.errors), ylab="Root MSE", ylim=c(0.368, 0.39), pch=19, type="b")
+points(sqrt(fw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
+legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
+```
+
+```{r}
+predict.regsubsets <- function(object, newdata, id, ...){
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(from, newdata)
+  coefi <- coef(object, id=id)
+  mat[, names(coefi)]%*%coefi
+}
+```
+
+
+
+### Lasso Regression
+
+
+### Ridge Regression
+
+
+
+Interestingly we see that the two time differences that we decided to add do are not significant for the moment. let's try to convert also those in logarithm scale and see if we gain something in terms of $R^2$ and $Adjusted-R^2$.
+
+
+```{r}
+#lm1_upd <- update(lm1, . ~ . - inc_resp_min_qy - inc_travel_min_qy + log(inc_resp_min_qy) + log(inc_travel_min_qy))
+#summary(lm1_upd)
+```
+
+As expected the p-value for the two time differences now on log scale results to be significative. However the $R^2$ and $Adjusted-R^2$ have been changed only by 0.003.
+
+### Stepwise Regression
+
+At this point we will use **regsubsets** in all its three forms: *forward* selection, *backword* selection and *bidirectional* elimination also known as "sequential replacement".
+
+
+
+We can use function **regsubsets** for stepwise regression. Forward selection:
+
+
+### Lasso
+
+
+### Ridge
 
