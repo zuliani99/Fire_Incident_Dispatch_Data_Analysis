@@ -394,7 +394,7 @@ summary(fire_data$disp_resp_min_indc)
 
 All our observations have non valid `disp_resp_min_indc` so we could delete both the column indicator and the respective column quantity `disp_resp_min_qy`. However we note that also in the original dataset all the observation have the `disp_resp_min_indc` set to **N**, which is quite strange, and seems that is problem relative to the data acquisition, thus we decide to mantein this time difference.
 
-```{r remove al_borough}
+```{r remove disp_resp_min_indc}
 fire_data <- fire_data %>% select(-c(disp_resp_min_indc))
 ```
 
@@ -1006,46 +1006,125 @@ plot(sqrt(val.errors), ylab="Root MSE", ylim=c(0.368, 0.39), pch=19, type="b")
 points(sqrt(fw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
 legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
 ```
+Of course the RMSE is referring to the log scale of `inc_resp_min_qy`
 
 ```{r}
 predict.regsubsets <- function(object, newdata, id, ...){
   form <- as.formula(object$call[[2]])
-  mat <- model.matrix(from, newdata)
+  mat <- model.matrix(form,newdata)
   coefi <- coef(object, id=id)
   mat[, names(coefi)]%*%coefi
 }
 ```
 
 
+An other step forward is to take into account the Cross Validation strategy on the entire train set for then be able to use the best model among the computed one to make predictions on the test set. Unfortunately there is no method `cv` like in the `glmnet` as we will see later to perform CV, thus we have to develop by ourself the procedure.
 
-### Lasso Regression
+```{r}
+set.seed(11)
+folds <- sample(rep(1:10, length=nrow(resp_min_fd.train)))
+table(folds)
+cv.errors <- matrix(NA, 10, 25)
+for (k in 1:10) {
+  best.fit <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train[folds != k,], nvmax = 25, method = "forward")
+  for (i in 1:25) {
+    pred <- predict.regsubsets(best.fit, resp_min_fd.train[folds == k,], id = i)
+    cv.errors[k,i] = mean((log(resp_min_fd.train$inc_resp_min_qy[folds == k]) - pred)^2)
+  }
+}
+rmse.cv <- sqrt(apply(cv.errors, 2, mean))
+plot(rmse.cv, pch=19, type="b")
+```
 
+
+Here the error are done fold by fold for each subset and then averaged.
 
 ### Ridge Regression
 
+```{r}
+x_train <- model.matrix(log(inc_resp_min_qy) ~ . -1, data = resp_min_fd.train)
+y_train <- log(resp_min_fd.train$inc_resp_min_qy)
 
-
-Interestingly we see that the two time differences that we decided to add do are not significant for the moment. let's try to convert also those in logarithm scale and see if we gain something in terms of $R^2$ and $Adjusted-R^2$.
+x_test <- model.matrix(log(inc_resp_min_qy) ~ . -1, data = resp_min_fd.test)
+y_test <- log(resp_min_fd.test$inc_resp_min_qy)
+```
 
 
 ```{r}
-#lm1_upd <- update(lm1, . ~ . - inc_resp_min_qy - inc_travel_min_qy + log(inc_resp_min_qy) + log(inc_travel_min_qy))
-#summary(lm1_upd)
+fit.ridge <- glmnet(x_train, y_train, alpha = 0)
+plot(fit.ridge, xvar = "lambda", label = TRUE)
+cv.ridge <- cv.glmnet(x_train, y_train, alpha = 0)
+plot(cv.ridge)
 ```
 
-As expected the p-value for the two time differences now on log scale results to be significative. However the $R^2$ and $Adjusted-R^2$ have been changed only by 0.003.
+Here we can see the plot of the coefficients.
+The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
 
-### Stepwise Regression
+$$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
 
-At this point we will use **regsubsets** in all its three forms: *forward* selection, *backword* selection and *bidirectional* elimination also known as "sequential replacement".
+It tryies to minimize e RSS but the loss is modified by a penalty of the sum of squares of the coefficiets. So il $\lambda$ is big we want to have the sum of square of the coeffcients small, so that shrike the coefficeints towards zero. And if lambda becomes very bug all the coefficeints wil become zero.
 
-
-
-We can use function **regsubsets** for stepwise regression. Forward selection:
-
-
-### Lasso
+Unlike Best Subset Regression wich controls the complexity of the models by restricting thr number of variables, RIdge Regression keeps all the variables in and shrinke the coefficeints toward zero
 
 
-### Ridge
+Now we can make prediction in our test set
+
+```{r}
+predict.lasso.ridge <- function(model, x_test, y_test){
+  pred <- predict(model, x_test)
+  dim(pred)
+  rmse <- sqrt(apply((y_test - pred)^2, 2, mean))
+  plot(log(model$lambda), rmse, type = "b", xlab = "log(lambda)")
+  lam.best <- model$lambda[order(rmse)[1]]
+  abline(v = log(lam.best), lwd = 1.2, lty = "dashed")
+  return(lam.best) 
+}
+```
+
+
+```{r}
+lam.best_ridge <- predict.lasso.ridge(fit.ridge, x_test, y_test)
+lam.best_ridge
+coef(fit.ridge, s = lam.best_ridge)
+```
+
+
+
+
+### Lasso Regression
+
+The difference between Lasso and Ridge is the penalty of the sum of the coefficients, indeed the lasso loss function is the following one:
+
+
+$$L(lasso) = RSS + \lambda \sum_{j=1}^p |\beta_j|$$
+
+Instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients. This is also controlling the size of the coefficients, since by penalize the sum of absolute value, that's actually going to restrict some of the coefficients to be actually zero.
+
+```{r}
+fit.lasso <- glmnet(x_train, y_train, alpha = 1) # alpha = 1 is by default
+plot(fit.lasso, xvar = "lambda", label = TRUE)
+cv.lasso <- cv.glmnet(x_train, y_train, aplha = 1)
+```
+
+So lasso is doing shirnkage and variable selection at the same time.
+
+Now we can also see the fraction of deviance explained
+
+```{r}
+plot(fit.lasso, xvar = "dev", label = TRUE)
+```
+
+```{r}
+plot(cv.lasso)
+coef(cv.lasso)
+```
+
+
+Now we can make prediction in our test set
+
+```{r}
+lam.best_lasso <- predict.lasso.ridge(fit.lasso, x_test, y_test)
+lam.best_lasso
+coef(fit.lasso, s = lam.best_lasso)
+```
 
