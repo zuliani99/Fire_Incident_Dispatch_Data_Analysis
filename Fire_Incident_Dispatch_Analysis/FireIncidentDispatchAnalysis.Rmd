@@ -256,8 +256,7 @@ ggplot(data=fire_data %>%
         aes(x=time_of_day, y=incident_number)) + 
       geom_bar(stat="identity", position=position_dodge()) +
       geom_text(aes(label=incident_number), vjust=1.6, color="white", position = position_dodge(0.9), size=3.5) +
-      labs(title = "Time of the Day - Incident Count", x = "Time of the Day", y = "Incident Count") +
-      theme_grey()
+      labs(title = "Time of the Day - Incident Count", x = "Time of the Day", y = "Incident Count")
 ```
 
 From this we can see that the higher number of fire incident is registered from 12 PM to 18 PM, whereas the lower number of fire incident happened from the 00 AM to 06 AM.
@@ -418,8 +417,7 @@ ggplot(data=fire_data %>% group_by(inc_borough, inc_resp_min_indc) %>% summarise
   geom_text(aes(label=incident_number), vjust=1.6, color="white",
             position = position_dodge(0.9), size=3.5) +
   scale_fill_brewer(palette="Paired") +
-  labs(title = "Incident Count - Borouh - Valid Response Time in Minutes", x = "Borough", y = "Incident Number", fill = "Valid Response\n Time in Minutes") +
-  theme_gray()
+  labs(title = "Incident Count - Borouh - Valid Response Time in Minutes", x = "Borough", y = "Incident Number", fill = "Valid Response\n Time in Minutes")
 ```
 
 We can see that the number of fire incident is higher for the valid response time in minutes but, it is much interesting observe the rateo between the valid and the non valid.
@@ -449,8 +447,7 @@ Now we do an additional analysis to see if there is some find of relation betwee
 ```{r geom_point tau resp_qy}
 ggplot(fire_data, aes(total_assigned_unit, inc_resp_min_qy)) + 
   geom_point(aes(colour = inc_resp_min_indc))+
-   labs(title = "Total Assigned Units - Response Time In Minutes", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Valid Response\n Time in Minutes") +
-  theme_gray()
+   labs(title = "Total Assigned Units - Response Time In Minutes", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Valid Response\n Time in Minutes")
 ```
 
 We note that the majority of fire incident that had been assigned a single units has a high response time and the relative measure is not valid. Whereas for an higher number of total units the response time decrease and becomes valids.
@@ -459,9 +456,8 @@ We note that the majority of fire incident that had been assigned a single units
 ```{r geom_point res_indc N tau resp_qy}
 ggplot(fire_data %>% filter(inc_resp_min_indc == "N")
             , aes(total_assigned_unit, inc_resp_min_qy)) + 
-  geom_point(aes(colour = inc_class_group)) +
-  labs(title = "Total Assigned Units - Response Time In Minutes - Incidnet Class Group", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Incident Class Groups") +
-  theme_gray()
+  geom_point(aes(colour = inc_class_group, shape = inc_class_group)) +
+  labs(title = "Total Assigned Units - Response Time In Minutes - Incidnet Class Group", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Incident Class Groups")
 ```
 
 Regarding the incident class group around all the incidents with invalid response time had been assigned a single units as we discussed before, but in addition we found that are from the **Medical Emergencies**, whereas almost all the other incidents are from the **NonMedical Emergencies**.
@@ -482,8 +478,7 @@ ggplot(data=tua_is_one,
   geom_text(aes(label=incident_number), vjust=1.5, color="black",
             position = position_dodge(0.9), size=3.5) +
   scale_fill_brewer(palette="Set1") +
-  labs(title = "Total Assigned Units One or Not", x = "Borough", y = "Incident Count", fill = "Total Assigned\nUnits are One") +
-  theme_gray()
+  labs(title = "Total Assigned Units One or Not", x = "Borough", y = "Incident Count", fill = "Total Assigned\nUnits are One")
 ```
 
 We have also added an additional factorial predictor `tua_is_one` to indicates if the total assigned units is equal to one or not.
@@ -501,8 +496,7 @@ ggplot(data=fire_data %>%
         geom_text(aes(label=incident_number), vjust=1.6, color="black",
                   position = position_dodge(0.9), size=3) +
         scale_fill_brewer(palette="Set1") +
-        labs(title = "Borough - Incident Counts - Incident Class -- for Total Assigned Units equal to 1", x = "Borough", y = "Incident Counts", fill = "Incident Class Group") +
-        theme_grey()
+        labs(title = "Borough - Incident Counts - Incident Class -- for Total Assigned Units equal to 1", x = "Borough", y = "Incident Counts", fill = "Incident Class Group")
 ```
 
 
@@ -533,9 +527,7 @@ ggplot(data=fire_data %>%
         aes(x=inc_borough, y=incident_number)) + 
       geom_bar(stat="identity", position=position_dodge()) +
       geom_text(aes(label=incident_number), vjust=1.6, color="white", position = position_dodge(0.9), size=3.5) +
-      #scale_fill_brewer(palette="Paired") +
-      labs(title = "Incident Count - Borouh - Valid Response Time in Second", x = "Borough", y = "Incident Count") +
-      theme_grey()
+      labs(title = "Incident Count - Borouh - Valid Response Time in Second", x = "Borough", y = "Incident Count")
 ```
 
 And we found that the majority of non valid `inc_resp_min_indc` that are Non-Medical Emergency are from the incident class equal to Assist Civilian - Non-Medical.
@@ -597,8 +589,7 @@ ggplot(data=na_locations %>%
         geom_text(aes(label=incident_number), vjust=1.6, color="black",
                   position = position_dodge(0.9), size=3.5) +
         #scale_fill_brewer(palette="Paired") +
-        labs(title = "NA location", x = "Borough", y = "Incident Count", fill = "Incident Class Group") +
-        theme_grey()
+        labs(title = "NA location", x = "Borough", y = "Incident Count", fill = "Incident Class Group")
 ```
 
 
@@ -675,8 +666,7 @@ ggplot(data=na_first_act_datetime %>%
         group_by(inc_class_group, inc_borough) %>%
         summarise(incident_number = n()), 
        aes(x=inc_borough, y=incident_number, fill=inc_class_group)) + geom_bar(stat="identity", position=position_dodge()) +
-labs(title = "NA First Act Date", x = "Borough", y = "Incident Count", fill = "Incident Class Group") +
-  theme_minimal()
+labs(title = "NA First Act Date", x = "Borough", y = "Incident Count", fill = "Incident Class Group")
 
 ```
 
@@ -696,8 +686,7 @@ fire_data_new <- na.omit(fire_data)
 fire_data_new <- fire_data_new %>% select(-c(zipcode, pol_prec, city_con_dist, commu_dist, al_location,
                                              commu_sc_dist, cong_dist, first_ass_datetime, first_act_datetime,
                                              first_onscene_datetime, inc_close_datetime, inc_resp_min_indc, 
-                                             id, al_number, inc_class,))
-                                             #tua_is_one, total_assigned_unit)) 
+                                             id, al_number, inc_class))
 ```
 
 
@@ -723,40 +712,91 @@ summary(fire_data_new)
 ```
 
 
+### Y value: inc_resp_min_qy
+
 ```{r}
 ggplot(fire_data_new,
-       aes(x = inc_borough, y = inc_resp_min_qy, color = inc_borough)) +  # ggplot function
-  geom_boxplot()# +
-  #labs(title = "Borough - Incident Number - Alarm Source", x = "Borough", y = "Incident Number", color = "Alarm Source")
+       aes(x = al_source_desc, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Alarm Source Description - Incident Minutes Response Time - Incident Class Borough",
+       x = "Alarm Source Description", y = "Incident Minutes Response Time", color = "Incident Class\nBorough")
 ```
+Here we can see that for the EMS-911 alarm source only Medical Emergencis, Medical MFAs and NonMedical Emergencies were arrived. Moreover NonMedical Emergencies comes most from phone, whereas Medical Emergencies from EMS.
 
 
 ```{r}
 ggplot(fire_data_new,
-       aes(x = al_source_desc, y = inc_resp_min_qy, color = al_source_desc)) +  # ggplot function
-  geom_boxplot()# +
-  #labs(title = "Borough - Incident Number - Alarm Source", x = "Borough", y = "Incident Number", color = "Alarm Source")
+       aes(x = day_type, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Day Type - Incident Minutes Response Time - Incident Class Group",
+       x = "Day Type", y = "Incident Minutes Response Time", color = "Incident Class\nGroup")
 ```
+
+In this boxplot we approximately can't see any pattern for both day type and borough, whoever there are many outliers for medical and non medical emergencies since are the two predominant incident class.
 
 ```{r}
 ggplot(fire_data_new,
-       aes(x = day_type, y = inc_resp_min_qy, color = day_type)) +  # ggplot function
-  geom_boxplot()# +
-  #labs(title = "Borough - Incident Number - Alarm Source", x = "Borough", y = "Incident Number", color = "Alarm Source")
+       aes(x = time_of_day, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Day Range Time - Incident Minutes Response Time - Incident Class Group",
+       x = "Day Range Time", y = "Incident Minutes Response Time", color = "Incident Class\nGroup")
 ```
+
+Simillarly as the previous described boxpolt here there we can't see any particular relevant pattern.
+
+```{r}
+ggplot(fire_data_new, aes(x = total_assigned_unit, y = inc_resp_min_qy, group = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Total Assagned Units - Incident Minutes Response Time - Incident Class Group",
+       x = "Total Assagned Units", y = "Incident Minutes Response Time", color = "Incident Class\nGroup")
+```
+
+Whereas here as described in a previous similar chart, the total assigned units and the incident response time in minutes appear to be inversely proportional, with the contradistinction of structural fires that have many assigned units and low response time and Non Medical Emergencies that have low assigned units and high response time.
+
+### Y value: emergency_min_qy
+
+Now we analyse the same box plot of before but now with a different response for the Y axis the emergency time in minutes.
 
 ```{r}
 ggplot(fire_data_new,
-       aes(x = time_of_day, y = inc_resp_min_qy, color = time_of_day)) +  # ggplot function
-  geom_boxplot()# +
-  #labs(title = "Borough - Incident Number - Alarm Source", x = "Borough", y = "Incident Number", color = "Alarm Source")
+       aes(x = al_source_desc, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Alarm Source Description - Emergency Minutes Time - Incident Borough",
+       x = "Alarm Source Description", y = "Emergency Minutes Time", color = "Incident Borough")
 ```
+
+
+Here the first effect that we see is the high number of Structural Fires that are outside the fourth band for the phone alarm source description.
 
 ```{r}
 ggplot(fire_data_new,
-       aes(x = inc_borough, y = others_units_assigned, color = inc_borough)) +  # ggplot function
-  geom_boxplot()# +
+       aes(x = day_type, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Day Type - Emergency Minutes Time - Incident Class Group",
+       x = "Day Type", y = "Emergency Minutes Time", color = "Incident Class\nGroup")
 ```
+
+Here instead we can't see any pattern regarding day type, whereas we can see that the most outliers are from Structurl Fires in both day types.
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = time_of_day, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Day Range Time - Emergency Minutes Time - Incident Class Group",
+       x = "Day Range Time", y = "Emergency Minutes Time", color = "Incident Class\nGroup")
+```
+
+Again similar as the previous boxplots we can't see any relevant patterns, except that the heavy outliers belonging to Structural Fires.
+
+```{r}
+ggplot(fire_data_new, aes(x=total_assigned_unit, y=emergency_min_qy, group=inc_class_group)) +
+  geom_point(aes(color=inc_class_group)) +
+  labs(title = "Total Assagned Units - Emergency Minutes Time - Incident Class Group",
+       x = "Total Assagned Units", y = "Emergency Minutes Time", color = "Incident Class\nGroup")
+```
+
+Finally here we can see that the Structural Fire incident have lots of variance directly and seems be a directly proportional relationship between the total assigned units and the Emergency Time. For the NonMedical Emergencies they are clustered and then for the Medical Emergencies we can see that they have been mostly assigend a single units.
+
 
 
 ### Maps Visualization
@@ -866,7 +906,19 @@ fire_data_new <- fire_data_new %>% filter(inc_travel_min_qy != 0, emergency_min_
 ```
 
 
-But before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
+Then we have to check the presence of correlation in the continuous predictor and if so deleting one or more of them.
+
+```{r}
+round(cor(fire_data_new %>% dplyr::select(where(is.numeric))), digits=3)
+```
+As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, that's we we decided to remove from the dataframe. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis. We have done this step to remove **singluarities** for the future models.
+
+```{r}
+fire_data_new <- fire_data_new %>% select(-c(total_assigned_unit))
+```
+
+
+Next before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
 
 ```{r}
 set.seed(43)
