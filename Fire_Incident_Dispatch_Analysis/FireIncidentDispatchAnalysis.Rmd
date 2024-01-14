@@ -40,6 +40,8 @@ if (!require("geojsonio")) install.packages("geojsonio")
 if (!require("leaflet")) install.packages("leaflet")
 if (!require("broom")) install.packages("broom")
 if (!require("plotly")) install.packages("plotly")
+if (!require("gridExtra")) install.packages("gridExtra")
+
 
 library(nnet)
 library(MASS)
@@ -62,6 +64,7 @@ library(geojsonio)
 library(leaflet) 
 library(broom)
 library(plotly)
+library(gridExtra)
 ```
 
 
@@ -108,7 +111,7 @@ In this analysis we have restricted the analysis only on the *last 50.000 observ
 29. **OTHER_UNITS_ASSIGNED_QUANTITY**: The number of  units that are not engines or ladders that were assigned to the incident.
 
 
-Regarding the response we will create two different analysis one with the aim to predict the **INCIDENT_RESPONSE_SECONDS_QY** and the other to predict the **TICKET_TIME_QY**. In both models the remaining time difference predictors are removed.
+Regarding the response we will try create two different analysis. One with the aim to predict the **INCIDENT_RESPONSE_SECONDS_QY** and the other to predict the **EMERGENCY_TIME** which is the time difference between the **FIRST_ON_SCENE_DATETIME** and **INCIDENT_CLOSE_DATETIME**. Both analysis use a linear regression model, however we will see that the assumption for applying the linear regression will be not meet, thus we will simplify our project moving into classification, dividing in two or more ranges the two responses.
 
 
 # Data Exlporation and Cleaning
@@ -888,12 +891,11 @@ mapview(list(firefighter_stations_sdf, geojson_newyork),
 ```
 
 
-# Let's build some models
+# Let's build some models (or at least try)
 
+As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_min_qy`, and then the `emergency_min_qy`. Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
 
-As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_min_qy`, then the `emergency_min_qy` and finally the `ticket_time`. Previously we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
-
-For all three analysis we transform the relative response in log scale in order to simulate the behaviour of the Exponential and Gamma GLMs.
+For both analysis we transform the relative response in log scale in order to simulate the behaviour of the Exponential and Gamma GLMs.
 
 So first things first let's check if there are some observations that have at least one of the time differences equal to zero.
 
@@ -909,7 +911,7 @@ fire_data_new <- fire_data_new %>% filter(inc_travel_min_qy != 0, emergency_min_
 Then we have to check the presence of correlation in the continuous predictor and if so deleting one or more of them.
 
 ```{r}
-round(cor(fire_data_new %>% dplyr::select(where(is.numeric))), digits=3)
+round(cor(fire_data_new %>% dplyr::select(where(is.numeric)))^2, digits=3)
 ```
 As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, that's we we decided to remove from the dataframe. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis. We have done this step to remove **singluarities** for the future models.
 
@@ -935,7 +937,9 @@ dim(fire_data.train)
 dim(fire_data.test)
 ```
 
-## Use emergency_min_qy as response
+## Linear Regression???
+
+### Use inc_resp_min_qy as response
 
 In this section we use `inc_resp_min_qy` as response, so we have to remove all the time difference predictors that are computed with one of the two datetime that comes after the incident datetime, so all the other except for our actual response.
 
@@ -945,434 +949,393 @@ In this section we use `inc_resp_min_qy` as response, so we have to remove all t
 resp_min_fd.train <- fire_data.train
 resp_min_fd.test <- fire_data.test
 
-# remove the ticket_time
-resp_min_fd.train <- resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, total_assigned_unit))
-resp_min_fd.test <- resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, total_assigned_unit))
+# remove the future time differences
+resp_min_fd.train <- resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
+resp_min_fd.test <- resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
 ```
-
-
-We decided to remove also the `total_assigned_unit` since it is in linear relation with the three assigned units predictors since it is the sum of the three.
 
 Let's build our first Linear Regression Model
 
 ```{r}
-lm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
-summary(lm_full)
+lm_irm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
+summary(lm_irm_full)
 ```
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_full)
+plot(lm_irm_full)
 ```
 
-
+Now we have to see if the linearity assumption are met and thus if we can use a linear regression model for our analysis.
+1. **Residuals vs Fitted plot**: here we can see if our residuals have a linear pattern and this is confermed by the straight horizontal red line. Even if,we have an higher amount of spreaded observations on the top of the red line.
+2. **Q-Q Residuals plot**: in this plot called also quantile - quantile residual plot and tells us if the residuals are normally distributed or not. If they follows the 45 degrees dotted line we can say so otherwise as in our case we can't say that are normally distributed, as we will see in much detail later.
+3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessments of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, something more or less in this case.
+4. **Residuals VS Leverage plot**: helps us to identify the influential points with the Cook's distance, so points that have influence on the regression line. And if some point feed in the area delimited by the dotted lines those points will be assigned as influential. In our case we do not have any observations that satisfy what we have just saied.
 
 ```{r}
-qqPlot(residuals(lm_full))
+qqPlot(residuals(lm_irm_full))
 ```
+
+Much clearly the qqPlot tells that the data the residuals are not normally distributed indeed are heavily right skewed. Thus we can't trust the p-values and the estimation of the coefficients. 
+
+```{r}
+residualPlots(lm_irm_full)
+```
+
+Here instead we have a look of all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
 
 Let's have a look of the possible power transformation of the response.
 
 ```{r}
-powerTransform(lm_full)
+powerTransform(lm_irm_full)
 ```
 
-The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is very close to zero.
+
+The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is close to zero.
 
 
 ```{r}
-lm_full_upd <- update(lm_full, log(inc_resp_min_qy) ~ .)
-summary(lm_full_upd)
+lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ .)
+summary(lm_irm_full_upd)
 ```
 
-The $R^2$ has increase w.r.t. the previous model. Let's see the residual plots.
+Now remember that we can't compere the $R^2$ with the previous model since in the last one the response is on a different scale.
 
-
-```{r}
-par(mfrow=c(2,2))
-plot(lm_full_upd)
-```
-
-
-```{r}
-residualPlots(lm_full_upd)
-qqPlot(residuals(lm_full_upd))
-influenceIndexPlot(lm_full_upd, vars = "Cook")
-summary(fitted(lm_full_upd))
-```
-
-
-```{r}
-lm_full_upd_2 <- update(lm_full, log(inc_resp_min_qy) ~ . + engines_assigned : inc_class_group + time_of_day : day_type + log(ladders_assigned + 1) + log(engines_assigned + 1) + log(others_units_assigned + 1) + log(engines_assigned + 1) : inc_class_group)
-summary(lm_full_upd_2)
-```
+Let's see how the residuals behaves in this new model.
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_full_upd_2)
+plot(lm_irm_full_upd)
+```
+
+Like the previous model we can say the residuals follow a linear pattern much better that the previous model. Again we do not have any influential point. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+
+1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
+2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
+
+The qqPlot is buch clear here, where we can see also the residuals vs predictors and residuals vs fitted values.
+
+```{r}
+residualPlots(lm_irm_full_upd)
+qqPlot(residuals(lm_irm_full_upd))
+```
+
+Thus again the linear assumptions are not meet, mainly by the non normal distribution of the residuals.
+
+At this point we have decided in any case to investigate this behaviour trying to fix the non normality of the residuals by modifying the scale of some predictors and adding interaction term between them.
+
+We start by modifying the previous model by adding the interaction term and scaling the numbe of assigned units by the logarithm scale after having increased by a single units.
+
+```{r}
+lm_irm_full_upd_2 <- update(lm_irm_full_upd, log(inc_resp_min_qy) ~ . + engines_assigned : inc_class_group + time_of_day : day_type + log(ladders_assigned + 1) + log(engines_assigned + 1) + log(others_units_assigned + 1) + log(engines_assigned + 1) : inc_class_group)
+summary(lm_irm_full_upd_2)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_2)
 ```
 
 
 ```{r}
-residualPlots(lm_full_upd_2)
-qqPlot(residuals(lm_full_upd_2))
-influenceIndexPlot(lm_full_upd_2, vars = "Cook")
-summary(fitted(lm_full_upd_2))
+residualPlots(lm_irm_full_upd_2)
+influenceIndexPlot(lm_irm_full_upd_2, vars = "Cook")
 ```
 
-Let's see the influential point and check how it behaves
+Again we it seems that nothing have changed regarding the qqPlot, whereas the distribution of fitted - residuals values is a little bit spreaded randomly. However here we have not constant variance on the residuals and we have also an influential point the 9504.
+
+Let's see the influential point and check how it behaves.
 
 ```{r}
-resp_min_fd.train[10036,]
+resp_min_fd.train[9504,]
 ```
 
-Now we investigate on why the 10036 observation is an influential point. Let's see how is the behaviour of the logarithm scale of the assigned units for the Structural Fire and see if we can find the observation 10036
+Now we investigate on why the 10036 observation is an influential point. Let's see how is the behaviour of the logarithm scale of the assigned units for the Structural Fire and see if we can find the observation 9504.
  
 ```{r}
-infl_point <- subset(resp_min_fd.train, inc_class_group == "Structural Fires")
+infl_point <- subset(resp_min_fd.train, inc_class_group == "Medical MFAs")
 
-par(mfrow = c(1, 3))
+# Create a boxplot for Engines Assigned
+p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Engines Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "engines_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Engines Units Count",
+       x = "Engines Units", y = "Count")
 
-boxplot(log(infl_point$engines_assigned + 1), main = "Engines Assigned")
-points(log(resp_min_fd.train[10036, "engines_assigned"] + 1), col = "red", pch = 16)
+# Create a boxplot for Ladders Assigned
+p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Ladders Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "ladders_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Ladders Units Count",
+       x = "Ladders Units", y = "Count")
 
-boxplot(log(infl_point$ladders_assigned + 1), main = "Ladders Assigned")
-points(log(resp_min_fd.train[10036, "ladders_assigned"] + 1), col = "red", pch = 16)
+# Create a boxplot for Other Units Assigned
+p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Other Units Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "others_units_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Other Units Count",
+       x = "Other Units", y = "Count")
 
-boxplot(log(infl_point$others_units_assigned + 1), main = "Other Units Assigned")
-points(log(resp_min_fd.train[10036, "others_units_assigned"] + 1), col = "red", pch = 16)
+# Display the plots in a 1x3 grid
+grid.arrange(p1, p2, p3, ncol = 3)
 ```
 
 
 And we see that the observed incident is far away from the distribution of others assigned units for the Medical MFAs incident, so we decide to remove this observation during the refitting of the last model.
 
 ```{r}
-lm_full_upd_3 <- update(lm_full_upd_2, subset = -10036)
-summary(lm_full_upd_3)
+lm_irm_full_upd_3 <- update(lm_irm_full_upd_2, subset = -9504)
+summary(lm_irm_full_upd_3)
 ```
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_full_upd_3)
+plot(lm_irm_full_upd_3)
+```
+
+Again we are on the same situation of before.
+
+```{r}
+residualPlots(lm_irm_full_upd_3)
+qqPlot(residuals(lm_irm_full_upd_3))
+influenceIndexPlot(lm_irm_full_upd_3, vars = "Cook")
+summary(fitted(lm_irm_full_upd_3))
+```
+
+We try again to remove the influential point even if it is not outside the cook's band.
+
+```{r}
+resp_min_fd.train[16373,]
+```
+
+```{r}
+infl_point <- subset(resp_min_fd.train, inc_class_group == "Structural Fires")
+
+# Create a boxplot for Engines Assigned
+p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Engines Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "engines_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Engines Units Count",
+       x = "Engines Units", y = "Count")
+
+# Create a boxplot for Ladders Assigned
+p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Ladders Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "ladders_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Ladders Units Count",
+       x = "Ladders Units", y = "Count")
+
+# Create a boxplot for Other Units Assigned
+p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Other Units Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "others_units_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Other Units Count",
+       x = "Other Units", y = "Count")
+
+# Display the plots in a 1x3 grid
+grid.arrange(p1, p2, p3, ncol = 3)
 ```
 
 
 ```{r}
-residualPlots(lm_full_upd_3)
-qqPlot(residuals(lm_full_upd_3))
-influenceIndexPlot(lm_full_upd_3, vars = "Cook")
-summary(fitted(lm_full_upd_3))
-```
-
-
-```{r}
-resp_min_fd.train[3754,]
-```
-
-```{r}
-infl_point <- subset(resp_min_fd.train, inc_class_group == "Medical MFAs" & inc_borough == "Bronx")
-
-par(mfrow = c(1, 3))
-
-boxplot(log(infl_point$engines_assigned + 1), main = "Engines Assigned")
-points(log(resp_min_fd.train[3754, "engines_assigned"] + 1), col = "red", pch = 16)
-
-boxplot(log(infl_point$ladders_assigned + 1), main = "Ladders Assigned")
-points(log(resp_min_fd.train[3754, "ladders_assigned"] + 1), col = "red", pch = 16)
-
-boxplot(log(infl_point$others_units_assigned + 1), main = "Other Units Assigned")
-points(log(resp_min_fd.train[3754, "others_units_assigned"] + 1), col = "red", pch = 16)
-```
-
-
-```{r}
-lm_full_upd_4 <- update(lm_full_upd_2, subset = -c(10036, 3754))
-summary(lm_full_upd_4)
+lm_irm_full_upd_4 <- update(lm_irm_full_upd_2, subset = -c(16373, 9504))
+summary(lm_irm_full_upd_4)
 ```
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_full_upd_4)
+plot(lm_irm_full_upd_4)
 ```
 
 
 ```{r}
-residualPlots(lm_full_upd_4)
-qqPlot(residuals(lm_full_upd_4))
-influenceIndexPlot(lm_full_upd_4, vars = "Cook")
-summary(fitted(lm_full_upd_4))
+residualPlots(lm_irm_full_upd_4)
+qqPlot(residuals(lm_irm_full_upd_4))
+influenceIndexPlot(lm_irm_full_upd_4, vars = "Cook")
+summary(fitted(lm_irm_full_upd_4))
 ```
 
 
+However we are still in a situation of non normal distribution of the residuals thus we can't apply a linear regression model of the log scale of `inc_resp_min_qy`.
+Let's see if in the other type response the assumption of linearity are meet or not (spoiler...they are not verified again :( ).
 
-Tring also GAM with splines
+
+### Use emergency_min_qy as response
+
+Again we make a copy of the train and test. This time we decided to merge the assigned units in a single predictor deleting the single counts in order to see if we have an improvement on the qqPlots for the next models.
 
 
 ```{r}
-library(splines)
-library(gam)
+# make a copy of the train and test
+emerg_min_fd.train <- fire_data.train
+emerg_min_fd.test <- fire_data.test
+
+emerg_min_fd.train$total_assigned_units = emerg_min_fd.train$engines_assigned + emerg_min_fd.train$ladders_assigned + emerg_min_fd.train$others_units_assigned
+emerg_min_fd.test$total_assigned_units = emerg_min_fd.test$engines_assigned + emerg_min_fd.test$ladders_assigned + emerg_min_fd.test$others_units_assigned
+
+# remove the future time differences and units counts
+emerg_min_fd.train <- emerg_min_fd.train %>% 
+  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
+emerg_min_fd.test <- emerg_min_fd.test %>% 
+  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
 ```
 
 
-```{r}
-fit.gam_1 <- gam(log(inc_resp_min_qy) ~ inc_borough + al_source_desc + 
-    al_index_desc + highest_al_level + inc_class_group + s(engines_assigned, 5) + 
-    s(ladders_assigned, 5) + s(others_units_assigned, 5) + day_type + time_of_day + 
-    tua_is_one + inc_class_group:engines_assigned + 
-    day_type:time_of_day, data = resp_min_fd.train)
-```
-
+Fit a linear regression model with all the predictors.
 
 ```{r}
-summary(fit.gam_1)
-plot(fit.gam_1, se=TRUE, col="blue", lwd=2)
-```
-
-
-```{r}
-fit.gam_2 <- gam(log(inc_resp_min_qy) ~ inc_borough + al_source_desc + 
-    al_index_desc + highest_al_level + inc_class_group + s(engines_assigned, 5) + 
-    s(ladders_assigned, 5) + s(others_units_assigned, 5) + day_type + time_of_day + 
-    tua_is_one + log(ladders_assigned + 1) + log(engines_assigned + 
-    1) + log(others_units_assigned + 1) + inc_class_group:engines_assigned + 
-    day_type:time_of_day + inc_class_group:log(engines_assigned + 
-    1), data = resp_min_fd.train)
-```
-
-
-```{r}
-summary(fit.gam_2)
-plot(fit.gam_2, se=TRUE, col="blue", lwd=2)
-```
-
-```{r}
-obtain.test.ori.rmse <- function(model, x_test, y_test, s = NULL){
-  if(is.null(s)) {
-     model.pred <- predict(model, newx = x_test)
-  } else {
-     model.pred <- predict(model, s = s, newx = x_test)
-  }
-  model.rmse <- sqrt(mean((exp(model.pred) - y_test) ^ 2))
-  return(model.rmse)
-}
+lm_em_full <- lm(emergency_min_qy ~ ., data = emerg_min_fd.train)
+summary(lm_em_full)
 ```
 
 
 ```{r}
-x_train <- model.matrix(formula(lm_full_upd_4), data = resp_min_fd.train) #(log(inc_resp_min_qy) ~ . -1
-y_train <- resp_min_fd.train$inc_resp_min_qy
-
-x_test <- model.matrix(formula(lm_full_upd_4), data = resp_min_fd.test) #(log(inc_resp_min_qy) ~ . -1
-y_test <- resp_min_fd.test$inc_resp_min_qy
-```
-
-
-
-```{r}
-gam.pred <- predict(fit.gam_2, newdata = resp_min_fd.test)
-gam.rmse <- sqrt(mean((exp(gam.pred) - y_test) ^ 2))
-gam.rmse
-```
-
-
-
-### Best Subset Regression
-
-```{r}
-regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41)
-summ_regfit.full <- summary(regfit.full)
-```
-
-
-
-```{r}
-plot(summ_regfit.full$cp, xlab = "Number of variables", ylab = "Cp")
-title("Best Subset - log(inc_resp_min_qy)")
-min_cp <- which.min(summ_regfit.full$cp)
-points(min_cp, summ_regfit.full$cp[min_cp], pch=20, col="red")
-```
-
-
-```{r}
-fw_regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41, method = "forward")
-summ_fw_regfit.full <- summary(fw_regfit.full)
-fw_min_cp <- which.min(summ_fw_regfit.full$cp)
-
-
-bk_regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41, method = "backward")
-summ_bk_regfit.full <- summary(bk_regfit.full)
-bk_min_cp <- which.min(summ_bk_regfit.full$cp)
-
-
-sw_regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41, method = "seqrep")
-summ_sw_regfit.full <- summary(sw_regfit.full)
-sw_min_cp <- which.min(summ_sw_regfit.full$cp)
-```
-
-
-```{r}
-par(mfrow = c(1, 3))
-plot(summ_fw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
-points(fw_min_cp, summ_fw_regfit.full$cp[fw_min_cp], pch=20, col="red")
-
-plot(summ_bk_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
-points(bk_min_cp, summ_bk_regfit.full$cp[bk_min_cp], pch=20, col="red")
-
-plot(summ_sw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
-points(sw_min_cp, summ_sw_regfit.full$cp[sw_min_cp], pch=20, col="red")
-```
-
-```{r}
-
-# non è in scala originale
-
-bs_method_error <- function(model, x_test, y_test) {
-  val.errors = rep(NA, 41)
-  for (i in 1:41) {
-    coefi = coef(model, id=i)
-    pred = x_test[,names(coefi)]%*%coefi
-    val.errors[i] = mean((pred - log(y_test))^2)
-  }
-
-  return(sqrt(val.errors))
-}
-
-val.errors_bs = bs_method_error(regfit.full, x_test, y_test)
-min_rmse = which.min(val.errors_bs)
-
-val.errors_fw = bs_method_error(fw_regfit.full, x_test, y_test)
-fw_min_rmse = which.min(val.errors_bs)
-
-val.errors_bk = bs_method_error(bk_regfit.full, x_test, y_test)
-bk_min_rmse = which.min(val.errors_bs)
-
-val.errors_sw = bs_method_error(sw_regfit.full, x_test, y_test)
-sw_min_rmse = which.min(val.errors_bs)
-
 par(mfrow=c(2,2))
-
-plot(val.errors_bs, ylab="Root MSE", pch=19, type="b")
-points(sqrt(regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
-legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
-points(min_rmse, val.errors_bs[min_rmse], pch=20, col="red")
-title("regfit.full")
-
-plot(val.errors_fw, ylab="Root MSE", pch=19, type="b")
-points(sqrt(fw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
-legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
-points(fw_min_rmse, val.errors_fw[fw_min_rmse], pch=20, col="red")
-title("fw_regfit.full")
-
-plot(val.errors_bk, ylab="Root MSE", pch=19, type="b")
-points(sqrt(bk_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
-legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
-points(bk_min_rmse, val.errors_bk[bk_min_rmse], pch=20, col="red")
-title("bk_regfit.full")
-
-plot(val.errors_sw, ylab="Root MSE", pch=19, type="b")
-points(sqrt(sw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
-legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
-points(sw_min_rmse, val.errors_sw[sw_min_rmse], pch=20, col="red")
-title("sw_regfit.full")
+plot(lm_em_full)
 ```
 
-```{r}
-val.errors_bs[min_rmse]
-val.errors_fw[fw_min_rmse]
-val.errors_bk[bk_min_rmse]
-val.errors_sw[sw_min_rmse]
-```
+Here the fitted values vs the residual are behaving in a liner relation but they are not randomly spread since we can view two / three clusters, the same thing discussion can be made for the Scale Location plot in which we can see that there is no constant variance. But again we are in a situation in which the residuals are not normally distributed as we can more clearly see in the following plot.
 
 ```{r}
-predict.regsubsets <- function(object, newdata, id, ...){
-  form <- as.formula(object$call[[2]])
-  mat <- model.matrix(form, newdata)
-  coefi <- coef(object, id=id)
-  mat[, names(coefi)]%*%coefi
-}
+qqPlot(residuals(lm_em_full))
+```
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_em_full)
+```
+
+We will try transform the response both using the logarithm scale and the power of 0.14. in order to see in we have an improvement on the distribution of the residuals.
+
+
+First by using the suggested power trasformation of 0.14.
+
+
+```{r}
+lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ .)
+summary(lm_em_full_014)
 ```
 
 
 ```{r}
-'set.seed(11)
-folds <- sample(rep(1:10, length=nrow(resp_min_fd.train)))
-table(folds)
-cv.errors <- matrix(NA, 10, 42)
-for (k in 1:10) {
-  best.fit <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train[folds != k,], nvmax = 41, method = "seqrep")
-  for (i in 1:41) {
-    pred <- predict.regsubsets(best.fit, resp_min_fd.train[folds == k, ], id = i)
-    cv.errors[k,i] = mean((log(resp_min_fd.train$inc_resp_min_qy[folds == k]) - pred)^2)
-  }
-}
-rmse.cv <- sqrt(apply(cv.errors, 2, mean))
-true_min <- which.min(rmse.cv)
-plot(rmse.cv, pch=19, type="b")
-points(true_min , rmse.cv[true_min], pch=20, col="red")'
-```
-```{r}
-#rmse.cv[true_min]
-```
-
-
-### Ridge
-
-
-```{r}
-fit.ridge <- glmnet(x_train, y_train, alpha = 0)
-plot(fit.ridge, xvar = "lambda", label = TRUE)
-cv.ridge <- cv.glmnet(x_train, y_train, alpha = 0)
-plot(cv.ridge)
+par(mfrow=c(2,2))
+plot(lm_em_full_014)
 ```
 
 ```{r}
-bestlam.ridge <- cv.ridge$lambda.min
-bestlam.ridge
+qqPlot(residuals(lm_em_full_014))
 ```
 
+In this case the two tails appear to be more homogeneous, however the situation is the same so we do not have normal distribution of residuals as we can see by the qqPlot.
+
+Trying the logarithm scale.
+
 ```{r}
-plot(fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
-abline(v = log(bestlam.ridge), lwd = 1.2, lty = "dashed")
+lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ .)
+summary(lm_em_full_log)
 ```
 
 
 ```{r}
-ridge.rmse <- obtain.test.ori.rmse(fit.ridge, x_test, y_test, s = bestlam.ridge)
-ridge.rmse
+par(mfrow=c(2,2))
+plot(lm_em_full_log)
+```
+
+Again we note the presence of three clusters on the first and third plots, let's investigate a bit in order to gain some additional information.
+
+```{r}
+ggplot(lm_em_full_log, aes(x = .fitted, y = .resid)) +
+  geom_point(aes(color = inc_class_group)) +
+  geom_hline(yintercept = 0) +
+  labs(title = "Residuals VS Fitted",
+       x = "Fitted Values", y = "Residuals", color = "Incident Class Group")
+```
+
+The right cluster is for the Structural Fires, the middle one contain both Medical and NonMedical Emergencies with some Strictural and NonStructural Fires, and the left one contains NonMedical Emergencies and a small number of Medical one and Medical and NonMedical MFAs.
+
+```{r}
+qqPlot(residuals(lm_em_full_log))
+```
+
+Here the right tail is less far from the 95 confidence interval respect the previous model, but on the other hand the left tail is heavily skewed to the bottom of the interval. Indicating that again we do not reach the normal distribution of the residual.
+
+In conclusion we end up in a situation where the linearity assumptions are not meet thus we can't use a regression model to perform prediction even with the logarithm transformation of the response. It is much likely that a powerful methods should be taken into account for this analysis with a deeper study of the relationship between predictors.
+
+
+## Cast the anaysis to a Calssification task
+
+As mention before we decided like the professor suggested to us, to cast our regression problem in a classification problem by dividing the range of possible time difference response into 2 for a binary classification or more than 2 for a multi-classification task.
+
+We will use the same predictors of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
+
+So first thing first we have to decide the range of value for both of them.
+
+```{r}
+summary(fire_data_new$inc_resp_min_qy)
 ```
 
 ```{r}
-least.rmse <- obtain.test.ori.rmse(fit.ridge, x_test, y_test)
-least.rmse
+summary(fire_data_new$emergency_min_qy)
 ```
 
-### Lasso
+We start by considering a classical binary classification in which the threshold used as response is the mean of the respective responses, thus:
 
 ```{r}
-fit.lasso <- glmnet(x_train, y_train, alpha = 1)
-plot(fit.lasso)
+# threshold for inc_resp_min_qy
+th_irm <- summary(fire_data_new$inc_resp_min_qy)[4]
+
+# threshold for emergency_min_qy
+th_eme <- summary(fire_data_new$emergency_min_qy)[4]
+```
+
+
+### Use the range of inc_resp_min_qy as response
+
+```{r}
+# make a copy of the train and test
+cl_resp_min_fd.train <- fire_data.train
+cl_resp_min_fd.test <- fire_data.test
+
+cl_resp_min_fd.train$fast_response <- cl_resp_min_fd.train$inc_resp_min_qy < th_irm
+cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_irm
+
+# remove the future time differences
+cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
 ```
 
 ```{r}
-cv.ridge <- cv.glmnet(x_train, y_train, alpha = 1)
-plot(cv.ridge) ## lasso path plot
-bestlam.lasso <- cv.ridge$lambda.min
+glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
+summary(glm.fit_full)
 ```
 
 
-```{r }
-plot(fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
-abline(v = log(bestlam.lasso), lwd = 1.2, lty = "dashed")
+```{r}
+glm.probs <- predict(glm.fit_up, newdata = cl_resp_min_fd.test, type = "response")
+```
+
+```{r}
+preds50 <- glm.probs > 0.5
+table(preds = preds50, true = cl_resp_min_fd.test$fast_response)
+```
+
+```{r}
+mean(preds50 == cl_resp_min_fd.test$fast_response)
+```
+
+The ROC curve can be computed with package **pROC**:
+```{r message = FALSE}
+library(pROC)
+glm.roc <- roc(cl_resp_min_fd.test$fast_response ~ glm.probs, plot = TRUE, print.auc = TRUE)
 ```
 
 
-```{r }
-lasso.rmse <- obtain.test.ori.rmse(fit.lasso, x_test, y_test, s = bestlam.lasso)
-lasso.rmse
-```
 
-
-
-### Comparison
-
-
+### Use the range of emergency_min_qy as response
