@@ -28,6 +28,7 @@ if (!require("glmnet")) install.packages("glmnet")
 if (!require("car")) install.packages("car")
 if (!require("caTools")) install.packages("caTools")
 if (!require("mgcv")) install.packages("mgcv")
+if (!require("pROC")) install.packages("pRoc")
 
 if (!require("summarytools")) install.packages("summarytools")
 if (!require("dplyr")) install.packages("dplyr")
@@ -52,6 +53,7 @@ library(glmnet)
 library(car)
 library(caTools)
 library(mgcv)
+library(pROC)
 
 library(summarytools)
 library(dplyr)
@@ -606,7 +608,7 @@ table(na_locations$inc_borough) / table(fire_data$inc_borough)
 table(na_locations$inc_class_group) / table(fire_data$inc_class_group)
 ```
 
-Moreover around the 40% of the whole incident that are of the incident class group NonMedical MFAs have at least one of the location columns to NA. Let's investigate.
+However by looking at the proportion with the original dataset around the 40% of the whole observations of type NonMedical MFAs have at least one of the location columns to NA. Let's investigate.
 
 
 ```{r analysis NonMedical MFAs 1}
@@ -617,7 +619,7 @@ fd_nm_mfa_cl <- fd_nm_mfa_cl[fd_nm_mfa_cl != 0]
 fd_nm_mfa_cl
 ```
 
-In the original dataset this is the distribution of inc_class for the NonMedical MF
+In the original dataset this is the distribution of inc_class for the NonMedical MFA.
 
 ```{r analysis NonMedical MFAs 2}
 na_nm_mfa_cl <- table(subset(na_locations, inc_class_group == "NonMedical MFAs")$inc_class)
@@ -639,6 +641,8 @@ na_nm_mfa_bro / fd_nm_mfa_bro
 ```
 And from here we can see that about the 78% of the observations that are NonMedical - MFAs that have at least one district column attribute to NA are from the RICHMOND / STATEN ISLAND.
 Also BRONX has about half of the NonMedical - MFAs observations that have at least one district column to NA.
+
+**NonMedical MFA** stands for **Non Medical - Medical First Aid**, unfortunately we are not able to find the meaning of **ERS**.
 
 
 
@@ -1311,31 +1315,431 @@ cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc
 cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
 ```
 
-```{r}
-glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
-summary(glm.fit_full)
-```
-
+Fit our full **GLM** using the family **binomial**.
 
 ```{r}
-glm.probs <- predict(glm.fit_up, newdata = cl_resp_min_fd.test, type = "response")
+res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
+summary(res_glm.fit_full)
+```
+
+We have an $AIC = 27793$, so in order to use this measure we have to comprare this model with an other one. 
+
+Update the previous model by adding some interaction terms.
+
+```{r}
+res_glm.fit_full_upd <- update(res_glm.fit_full, . ~ . + engines_assigned : al_source_desc + day_type : ladders_assigned, data = cl_resp_min_fd.train)
+summary(res_glm.fit_full_upd)
 ```
 
 ```{r}
-preds50 <- glm.probs > 0.5
-table(preds = preds50, true = cl_resp_min_fd.test$fast_response)
+AIC(res_glm.fit_full, res_glm.fit_full_upd)
 ```
 
+We see a substantial decrease of the AIC for the updated model, thus we will use that one to make our predictions.
+
 ```{r}
-mean(preds50 == cl_resp_min_fd.test$fast_response)
+res_glm.probs <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response")
 ```
+
+The agreement between predictions and observed survival data is conveniently summarized with a confusion matrix. Below we assign a fast response incident if the estimated probability of being fast is larger than 0.5: 
+```{r}
+res_preds50 <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response") > 0.5
+table(preds = res_preds50, true = cl_resp_min_fd.test$fast_response)
+```
+The accuracy of the logistic regression classifier with the 50% threshold is:
+```{r}
+mean(res_preds50 == cl_resp_min_fd.test$fast_response)
+```
+
+Sensitivity and specificity are  ```r sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)``` / ```r sum(cl_resp_min_fd.test$fast_response == TRUE)``` = ```r round(sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)/sum(cl_resp_min_fd.test$fast_response == TRUE), 2)``` and ```r sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)``` / ```r sum(cl_resp_min_fd.test$fast_response == FALSE)``` = ```r round(sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)/sum(cl_resp_min_fd.test$fast_response == FALSE), 2)```, respectively.
 
 The ROC curve can be computed with package **pROC**:
 ```{r message = FALSE}
-library(pROC)
-glm.roc <- roc(cl_resp_min_fd.test$fast_response ~ glm.probs, plot = TRUE, print.auc = TRUE)
+res_glm.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.probs, plot = TRUE, print.auc = TRUE)
 ```
+
+The AUC for this logistic regression is ```r round(res_glm.roc$auc, 2)```. Now we use the function **coords** of package **pROC** to extract the coordinates of the ROC  at the *best point*, which corresponding to the maximum of the sum of sensitivity and specificity (see the online help of **coords** for more details
+```{r}
+coords(res_glm.roc, x = "best", ret = "all")
+```
+Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(res_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
+```{r}
+res_acc_glm <- 100*coords(res_glm.roc, x = "best", ret = "all")$accuracy
+res_acc_glm
+```
+
+
+Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+
+We start by using **Ridge Regression**. First of all we have to create our model matrices.
+```{r}
+# model matrix for train
+x_train <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+y_train <- cl_resp_min_fd.train$fast_response
+
+# mode matrix for test
+x_test <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.test)
+y_test <- cl_resp_min_fd.test$fast_response
+```
+
+
+
+
+
+```{r}
+res_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(res_fit.ridge, xvar = "lambda", label = TRUE)
+res_cv.ridge <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(res_cv.ridge)
+```
+
+
+
+Here we can see the plot of the coefficients.
+The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
+
+$$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
+
+It tryies to minimize e RSS but the loss is modified by a penalty of the sum of squares of the coefficiets. So il $\lambda$ is big we want to have the sum of square of the coeffcients small, so that shrike the coefficeints towards zero. And if lambda becomes very bug all the coefficeints wil become zero.
+
+Unlike Best Subset Regression wich controls the complexity of the models by restricting thr number of variables, RIdge Regression keeps all the variables in and shrinke the coefficeints toward zero
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+res_cv.ridge$lambda.min
+```
+
+
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+res_bestlam.ridge <- res_cv.ridge$lambda.1se
+res_bestlam.ridge
+```
+
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r}
+plot(res_fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(res_bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_ridge <- predict(res_fit.ridge, s = res_bestlam.ridge, newx = x_test, type = "response") > 0.5
+table(preds = pred_ridge, true = y_test)
+```
+
+Finally the accuracy on the test set is:
+
+```{r}
+res_acc_glm_ridge <- mean(pred_ridge == y_test)
+res_acc_glm_ridge
+```
+
+Now is the turn of **Lasso**.
+
+
+The difference between Lasso and Ridge is the penalty of the sum of the coefficients, indeed the lasso loss function is the following one:
+
+$$L(lasso) = RSS + \lambda \sum_{j=1}^p |\beta_j|$$
+
+Instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients. This is also controlling the size of the coefficients, since by penalize the sum of absolute value, that's actually going to restrict some of the coefficients to be actually zero.
+
+
+
+```{r}
+res_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(res_fit.lasso)
+res_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(res_cv.lasso) ## lasso path plot
+```
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+res_cv.lasso$lambda.min
+```
+
+
+Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+res_bestlam.lasso <- res_cv.lasso$lambda.1se
+res_bestlam.lasso
+```
+
+
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r }
+plot(res_fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_lasso <- predict(res_fit.lasso, s = res_bestlam.lasso, newx = x_test, type = "response") > 0.5
+table(preds = pred_lasso, true = y_test)
+```
+
+
+Finally the accuracy on the test set is:
+
+```{r}
+res_acc_glm_lasso <- mean(pred_ridge == y_test)
+res_acc_glm_lasso
+```
+
+
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**.
+
+
+```{r}
+# use the fucntion formula to replicate the model formula of the second glml model
+res_lda.fit <- lda(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+res_lda.fit
+```
+The printed output of **lda** includes:
+
+- the a-priori probabilities of survival;
+- the group means.
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+```{r}
+res_lda.preds <- predict(res_lda.fit, newdata = cl_resp_min_fd.test, type = "response")
+table(preds = res_lda.preds$class, true = y_test)
+```
+
+
+And finally computing the accuracy:
+```{r}
+mean(res_lda.preds$class == y_test)
+```
+
+The ROC curve for linear discriminant analysis is
+```{r}
+res_lda.roc <- roc(y_test ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(res_lda.roc, x = "best", ret = "all")
+```
+The best choice for the threshold of linear discriminant analysis yields an accuracy of:
+```{r}
+res_acc_lda <- 100*coords(res_lda.roc, x = "best", ret = "all")$accuracy
+res_acc_lda
+```
+
+
+
+Continuing with the analysis we try **Naive Bayes** algorithm.
+
+```{r}
+res_nb.fit <- naiveBayes(formula(res_glm.fit_full), data = cl_resp_min_fd.train)
+nb.fit
+```
+
+
+The output of **naiveBayes** contains:
+
+- the estimated a-priori probabilities; 
+- the estimated conditional probabilities for the qualitative variables;
+- the estimated group means and standard deviations for the quantitative variables.
+
+Prediction for the test set:
+```{r}
+res_nb.preds <- predict(res_nb.fit, newdata = cl_resp_min_fd.test)
+table(preds = res_nb.preds, true = cl_resp_min_fd.test$fast_response)
+```
+
+Predicted class probabilities can be obtained using the argument **type = "raw"**:
+```{r}
+nb.posterior <- predict(res_nb.fit, newdata = cl_resp_min_fd.test, type = "raw")
+head(nb.posterior)
+```
+
+ROC curve:
+```{r}
+res_nb.roc <- roc(cl_resp_min_fd.test$fast_response ~ nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(res_nb.roc, x = "best", ret = "all")
+```
+The accuracy for the best choice of the threshold of Naive Bayes is:
+```{r}
+res_acc_nb <- coords(res_nb.roc, x = "best", ret = "all")$accuracy
+res_acc_nb
+```
+
+
+
+
+And finally we deal with **KNN**. KNN has a random component because if there are ties among the nearest neighbors, then **R** will randomly sample so to break the ties. Therefore, we fix the seed of the pseudorandom generator in order to preserve the reproducibility of the results and then run KNN with k=5:
+```{r}
+set.seed(98765)
+res_preds.knn <- knn(train = x_train, test = x_test, cl = y_train , k = 5)
+```
+
+Confusion matrix for KNN with k=5:
+```{r}
+table(preds = res_preds.knn, true = y_test)
+```
+With a corresponding accuracy equal to:
+```{r}
+mean(res_preds.knn == y_test)
+```
+But what happens if we modify the number of neighbours? Below KNN is run for say k from 1 to 20:
+```{r}
+rates <- double(20)
+
+for (i in 1:20) {
+  tmp <- knn(train = x_train, test = x_test, cl = y_train, k = i)
+  rates[i] <- mean(tmp == y_test)
+}
+
+plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
+```
+The highest accuracy is obtained with k = ```{r} which.max(rates) ``` and with an accuracy of
+```{r}
+res_acc_knn <- max(rates)
+```
+
+
+Summary of results for the Classification task with `fast_response` as response:
+
+```{r}
+data.frame (
+  metho = c("GLM", "GLM_ridge", "GLM_lasso", "LDA", "Naive Bayes", "KNN"),
+  test_Accuracy = c(res_acc_glm, res_acc_glm_ridge, res_acc_glm_lasso, res_acc_lda, res_acc_nb, res_acc_knn)
+)
+```
+
+
+
+
+
+
+
+
+Multinomial Logistic Regression
+
+
+```{r}
+'resp_mn.train <- fire_data.train
+resp_mn.test <- fire_data.test
+
+summ_fd <- summary(fire_data_new$inc_resp_min_qy)
+
+resp_mn.train$fast_response <- cut(resp_mn.train$inc_resp_min_qy,
+              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
+              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
+resp_mn.test$fast_response <- cut(resp_mn.test$inc_resp_min_qy,
+              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
+              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
+
+# remove the future time differences
+resp_mn.train <- resp_mn.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+resp_mn.test <- resp_mn.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))'
+```
+
+
+```{r}
+#multi.fit <- multinom(fast_response ~ . + , data = resp_mn.train, trace = FALSE)
+```
+
+```{r}
+'multi.preds <- predict(multi.fit, newdata = resp_mn.test)
+table(preds = multi.preds, true = resp_mn.test$fast_response)'
+```
+Multinomial logistic regression never predicts the second class. The accuracy of the multinomial logistic classifier is 
+```{r}
+'mean(multi.preds == resp_mn.test$fast_response)'
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 ### Use the range of emergency_min_qy as response
+
+```{r}
+# make a copy of the train and test
+cl_emerg_min_fd.train <- fire_data.train
+cl_emerg_min_fd.test <- fire_data.test
+
+cl_emerg_min_fd.train$fast_emergency <- cl_emerg_min_fd.train$emergency_min_qy < th_eme
+cl_emerg_min_fd.test$fast_emergency <- cl_emerg_min_fd.test$emergency_min_qy < th_eme
+
+# remove the future time differences and units counts
+cl_emerg_min_fd.train <- cl_emerg_min_fd.train %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
+cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+'resp_mn.train <- fire_data.train
+resp_mn.test <- fire_data.test
+
+summ_fd <- summary(fire_data_new$emergency_min_qy)
+
+resp_mn.train$fast_response <- cut(resp_mn.train$emergency_min_qy,
+              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
+              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
+resp_mn.test$fast_response <- cut(resp_mn.test$emergency_min_qy,
+              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
+              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
+
+# remove the future time differences
+resp_mn.train <- resp_mn.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, emergency_min_qy))
+resp_mn.test <- resp_mn.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, emergency_min_qy))'
+```
+
+
+```{r}
+#multi.fit <- multinom(fast_response ~ . , data = resp_mn.train, trace = FALSE)
+```
+
+```{r}
+'multi.preds <- predict(multi.fit, newdata = resp_mn.test)
+table(preds = multi.preds, true = resp_mn.test$fast_response)'
+```
+Multinomial logistic regression never predicts the second class. The accuracy of the multinomial logistic classifier is 
+```{r}
+#mean(multi.preds == resp_mn.test$fast_response)
+```
+
