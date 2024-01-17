@@ -2,7 +2,13 @@
 title: "Part 3 - Classification"
 author: "Zuliani Riccardo"
 date: "17/1/2024"
-output: html_document
+output: 
+  html_document: 
+    toc: true
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -12,12 +18,16 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 ```
 
 # Load Libraries
-```{r, cache=TRUE}
-fire_data <- read.csv("datasets/fire_data_clean.csv")
 
-head(fire_data)
-
-dim(fire_data)
+```{r}
+library(MASS)
+library(e1071)
+library(class)
+library(leaps)
+library(glmnet)
+library(pROC)
+library(leaflet)
+library(tidyverse)
 ```
 
 
@@ -27,24 +37,36 @@ As mention before we decided like the professor suggested to us, to cast our reg
 
 We will use the same predictors of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
 
-So first thing first we have to decide the range of value for both of them.
+First things first load the cleaned train and test datasets.
+```{r, cache=TRUE}
+fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv")
+fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv")
+
+fire_data_clean <- rbind(fire_data_clean.train, fire_data_clean.test)
+
+head(fire_data_clean)
+
+dim(fire_data_clean)
+```
+
+Then we have to decide the range of value for both of them.
 
 ```{r}
-summary(fire_data_new$inc_resp_min_qy)
+summary(fire_data_clean$inc_resp_min_qy)
 ```
 
 ```{r}
-summary(fire_data_new$emergency_min_qy)
+summary(fire_data_clean$emergency_min_qy)
 ```
 
 We start by considering a classical binary classification in which the threshold used as response is the mean of the respective responses, thus:
 
 ```{r}
 # threshold for inc_resp_min_qy
-th_irm <- summary(fire_data_new$inc_resp_min_qy)[4]
+th_irm <- summary(fire_data_clean$inc_resp_min_qy)[4]
 
 # threshold for emergency_min_qy
-th_eme <- summary(fire_data_new$emergency_min_qy)[4]
+th_eme <- summary(fire_data_clean$emergency_min_qy)[4]
 ```
 
 
@@ -54,8 +76,8 @@ th_eme <- summary(fire_data_new$emergency_min_qy)[4]
 First thing first we 
 ```{r}
 # make a copy of the train and test
-cl_resp_min_fd.train <- fire_data.train
-cl_resp_min_fd.test <- fire_data.test
+cl_resp_min_fd.train <- fire_data_clean.train
+cl_resp_min_fd.test <- fire_data_clean.test
 
 # set the factorial response via the early computed threshold
 cl_resp_min_fd.train$fast_response <- as.factor(cl_resp_min_fd.train$inc_resp_min_qy < th_irm)

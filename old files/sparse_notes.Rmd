@@ -1,0 +1,528 @@
+
+Now given the updated full model we can run four model selection that we saw during this course.
+
+### Best Subset Regression
+
+This technique looks through all possible regression models of all different subset sizes and look for the best of each size. So it produces a sequence of models which is the best subset for each particular size.
+
+We specify the full number of available predictors by parameter `nvmax`, so we will get 1 subsets of each size up to 12 in this case.
+
+```{r}
+regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25)
+summ_regfit.full <- summary(regfit.full)
+summ_regfit.full
+```
+
+```{r}
+plot(summ_regfit.full$cp, xlab = "Number of variables", ylab = "Cp")
+title("Best Subset - log(inc_resp_min_qy)")
+min_cp <- which.min(summ_regfit.full$cp)
+points(min_cp, summ_regfit.full$cp[min_cp], pch=20, col="red")
+```
+
+There is also an interesting plot method for the regsubset object
+
+```{r}
+plot(regfit.full, scale="Cp")
+coef(regfit.full, min_cp)
+```
+
+
+
+Now we look into the three methods of best subset regression: **forward**, **backword** and **bidirectional elimination**.
+
+```{r}
+fw_regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25, method = "forward")
+summ_fw_regfit.full <- summary(fw_regfit.full)
+fw_min_cp <- which.min(summ_fw_regfit.full$cp)
+
+
+bk_regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25, method = "backward")
+summ_bk_regfit.full <- summary(bk_regfit.full)
+bk_min_cp <- which.min(summ_bk_regfit.full$cp)
+
+
+sw_regfit.full <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train, nvmax = 25, method = "seqrep")
+summ_sw_regfit.full <- summary(sw_regfit.full)
+sw_min_cp <- which.min(summ_sw_regfit.full$cp)
+```
+
+
+```{r}
+par(mfrow = c(1, 3))
+plot(summ_fw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(fw_min_cp, summ_fw_regfit.full$cp[fw_min_cp], pch=20, col="red")
+
+plot(summ_bk_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(bk_min_cp, summ_bk_regfit.full$cp[bk_min_cp], pch=20, col="red")
+
+plot(summ_sw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(sw_min_cp, summ_sw_regfit.full$cp[sw_min_cp], pch=20, col="red")
+```
+
+
+Now we can try to make prediction using the best model of all the three methods.
+
+```{r}
+val.errors = rep(NA, 25)
+
+x.test = model.matrix(log(inc_resp_min_qy) ~ ., data = resp_min_fd.test)
+
+for (i in 1:25) {
+  coefi = coef(fw_regfit.full, id=i)
+  pred = x.test[,names(coefi)]%*%coefi
+  val.errors[i] = mean((log(resp_min_fd.test$inc_resp_min_qy) - pred)^2)
+}
+
+plot(sqrt(val.errors), ylab="Root MSE", ylim=c(0.368, 0.39), pch=19, type="b")
+points(sqrt(fw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
+legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
+```
+Of course the RMSE is referring to the log scale of `inc_resp_min_qy`
+
+```{r}
+predict.regsubsets <- function(object, newdata, id, ...){
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form,newdata)
+  coefi <- coef(object, id=id)
+  mat[, names(coefi)]%*%coefi
+}
+```
+
+
+An other step forward is to take into account the Cross Validation strategy on the entire train set for then be able to use the best model among the computed one to make predictions on the test set. Unfortunately there is no method `cv` like in the `glmnet` as we will see later to perform CV, thus we have to develop by ourself the procedure.
+
+```{r}
+set.seed(11)
+folds <- sample(rep(1:10, length=nrow(resp_min_fd.train)))
+table(folds)
+cv.errors <- matrix(NA, 10, 25)
+for (k in 1:10) {
+  best.fit <- regsubsets(log(inc_resp_min_qy) ~ ., data = resp_min_fd.train[folds != k,], nvmax = 25, method = "forward")
+  for (i in 1:25) {
+    pred <- predict.regsubsets(best.fit, resp_min_fd.train[folds == k,], id = i)
+    cv.errors[k,i] = mean((log(resp_min_fd.train$inc_resp_min_qy[folds == k]) - pred)^2)
+  }
+}
+rmse.cv <- sqrt(apply(cv.errors, 2, mean))
+plot(rmse.cv, pch=19, type="b")
+```
+
+
+Here the error are done fold by fold for each subset and then averaged.
+
+### Ridge Regression
+
+```{r}
+x_train <- model.matrix(log(inc_resp_min_qy) ~ . -1, data = resp_min_fd.train)
+y_train <- log(resp_min_fd.train$inc_resp_min_qy)
+
+x_test <- model.matrix(log(inc_resp_min_qy) ~ . -1, data = resp_min_fd.test)
+y_test <- log(resp_min_fd.test$inc_resp_min_qy)
+```
+
+
+```{r}
+fit.ridge <- glmnet(x_train, y_train, alpha = 0)
+plot(fit.ridge, xvar = "lambda", label = TRUE)
+cv.ridge <- cv.glmnet(x_train, y_train, alpha = 0)
+plot(cv.ridge)
+```
+
+Here we can see the plot of the coefficients.
+The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
+
+$$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
+
+It tryies to minimize e RSS but the loss is modified by a penalty of the sum of squares of the coefficiets. So il $\lambda$ is big we want to have the sum of square of the coeffcients small, so that shrike the coefficeints towards zero. And if lambda becomes very bug all the coefficeints wil become zero.
+
+Unlike Best Subset Regression wich controls the complexity of the models by restricting thr number of variables, RIdge Regression keeps all the variables in and shrinke the coefficeints toward zero
+
+
+Now we can make prediction in our test set
+
+```{r}
+predict.lasso.ridge <- function(model, x_test, y_test){
+  pred <- predict(model, x_test)
+  dim(pred)
+  rmse <- sqrt(apply((y_test - pred)^2, 2, mean))
+  plot(log(model$lambda), rmse, type = "b", xlab = "log(lambda)")
+  lam.best <- model$lambda[order(rmse)[1]]
+  abline(v = log(lam.best), lwd = 1.2, lty = "dashed")
+  return(lam.best) 
+}
+```
+
+
+```{r}
+lam.best_ridge <- predict.lasso.ridge(fit.ridge, x_test, y_test)
+lam.best_ridge
+coef(fit.ridge, s = lam.best_ridge)
+```
+
+
+
+
+### Lasso Regression
+
+The difference between Lasso and Ridge is the penalty of the sum of the coefficients, indeed the lasso loss function is the following one:
+
+
+$$L(lasso) = RSS + \lambda \sum_{j=1}^p |\beta_j|$$
+
+Instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients. This is also controlling the size of the coefficients, since by penalize the sum of absolute value, that's actually going to restrict some of the coefficients to be actually zero.
+
+```{r}
+fit.lasso <- glmnet(x_train, y_train, alpha = 1) # alpha = 1 is by default
+plot(fit.lasso, xvar = "lambda", label = TRUE)
+cv.lasso <- cv.glmnet(x_train, y_train, aplha = 1)
+```
+
+So lasso is doing shirnkage and variable selection at the same time.
+
+Now we can also see the fraction of deviance explained
+
+```{r}
+plot(fit.lasso, xvar = "dev", label = TRUE)
+```
+
+```{r}
+plot(cv.lasso)
+coef(cv.lasso)
+```
+
+
+Now we can make prediction in our test set
+
+```{r}
+lam.best_lasso <- predict.lasso.ridge(fit.lasso, x_test, y_test)
+lam.best_lasso
+coef(fit.lasso, s = lam.best_lasso)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Trying also GAM with splines
+
+
+```{r}
+library(splines)
+library(gam)
+```
+
+
+```{r}
+fit.gam_1 <- gam(log(inc_resp_min_qy) ~ inc_borough + al_source_desc + 
+    al_index_desc + highest_al_level + inc_class_group + s(engines_assigned, 5) + 
+    s(ladders_assigned, 5) + s(others_units_assigned, 5) + day_type + time_of_day + 
+    tua_is_one + inc_class_group:engines_assigned + 
+    day_type:time_of_day, data = resp_min_fd.train)
+```
+
+
+```{r}
+summary(fit.gam_1)
+plot(fit.gam_1, se=TRUE, col="blue", lwd=2)
+```
+
+
+```{r}
+fit.gam_2 <- gam(log(inc_resp_min_qy) ~ inc_borough + al_source_desc + 
+    al_index_desc + highest_al_level + inc_class_group + s(engines_assigned, 5) + 
+    s(ladders_assigned, 5) + s(others_units_assigned, 5) + day_type + time_of_day + 
+    tua_is_one + log(ladders_assigned + 1) + log(engines_assigned + 
+    1) + log(others_units_assigned + 1) + inc_class_group:engines_assigned + 
+    day_type:time_of_day + inc_class_group:log(engines_assigned + 
+    1), data = resp_min_fd.train)
+```
+
+
+```{r}
+summary(fit.gam_2)
+plot(fit.gam_2, se=TRUE, col="blue", lwd=2)
+```
+
+```{r}
+obtain.test.ori.rmse <- function(model, x_test, y_test, s = NULL){
+  if(is.null(s)) {
+     model.pred <- predict(model, newx = x_test)
+  } else {
+     model.pred <- predict(model, s = s, newx = x_test)
+  }
+  model.rmse <- sqrt(mean((exp(model.pred) - y_test) ^ 2))
+  return(model.rmse)
+}
+```
+
+
+```{r}
+x_train <- model.matrix(formula(lm_full_upd_4), data = resp_min_fd.train) #(log(inc_resp_min_qy) ~ . -1
+y_train <- resp_min_fd.train$inc_resp_min_qy
+
+x_test <- model.matrix(formula(lm_full_upd_4), data = resp_min_fd.test) #(log(inc_resp_min_qy) ~ . -1
+y_test <- resp_min_fd.test$inc_resp_min_qy
+```
+
+
+
+```{r}
+gam.pred <- predict(fit.gam_2, newdata = resp_min_fd.test)
+gam.rmse <- sqrt(mean((exp(gam.pred) - y_test) ^ 2))
+gam.rmse
+```
+
+
+
+### Best Subset Regression
+
+```{r}
+regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41)
+summ_regfit.full <- summary(regfit.full)
+```
+
+
+
+```{r}
+plot(summ_regfit.full$cp, xlab = "Number of variables", ylab = "Cp")
+title("Best Subset - log(inc_resp_min_qy)")
+min_cp <- which.min(summ_regfit.full$cp)
+points(min_cp, summ_regfit.full$cp[min_cp], pch=20, col="red")
+```
+
+
+```{r}
+fw_regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41, method = "forward")
+summ_fw_regfit.full <- summary(fw_regfit.full)
+fw_min_cp <- which.min(summ_fw_regfit.full$cp)
+
+
+bk_regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41, method = "backward")
+summ_bk_regfit.full <- summary(bk_regfit.full)
+bk_min_cp <- which.min(summ_bk_regfit.full$cp)
+
+
+sw_regfit.full <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train, nvmax = 41, method = "seqrep")
+summ_sw_regfit.full <- summary(sw_regfit.full)
+sw_min_cp <- which.min(summ_sw_regfit.full$cp)
+```
+
+
+```{r}
+par(mfrow = c(1, 3))
+plot(summ_fw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(fw_min_cp, summ_fw_regfit.full$cp[fw_min_cp], pch=20, col="red")
+
+plot(summ_bk_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(bk_min_cp, summ_bk_regfit.full$cp[bk_min_cp], pch=20, col="red")
+
+plot(summ_sw_regfit.full$cp, xlab = "Number of Variables", ylab = "Cp", type = 'l')
+points(sw_min_cp, summ_sw_regfit.full$cp[sw_min_cp], pch=20, col="red")
+```
+
+```{r}
+
+# non è in scala originale
+
+bs_method_error <- function(model, x_test, y_test) {
+  val.errors = rep(NA, 41)
+  for (i in 1:41) {
+    coefi = coef(model, id=i)
+    pred = x_test[,names(coefi)]%*%coefi
+    val.errors[i] = mean((pred - log(y_test))^2)
+  }
+
+  return(sqrt(val.errors))
+}
+
+val.errors_bs = bs_method_error(regfit.full, x_test, y_test)
+min_rmse = which.min(val.errors_bs)
+
+val.errors_fw = bs_method_error(fw_regfit.full, x_test, y_test)
+fw_min_rmse = which.min(val.errors_bs)
+
+val.errors_bk = bs_method_error(bk_regfit.full, x_test, y_test)
+bk_min_rmse = which.min(val.errors_bs)
+
+val.errors_sw = bs_method_error(sw_regfit.full, x_test, y_test)
+sw_min_rmse = which.min(val.errors_bs)
+
+par(mfrow=c(2,2))
+
+plot(val.errors_bs, ylab="Root MSE", pch=19, type="b")
+points(sqrt(regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
+legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
+points(min_rmse, val.errors_bs[min_rmse], pch=20, col="red")
+title("regfit.full")
+
+plot(val.errors_fw, ylab="Root MSE", pch=19, type="b")
+points(sqrt(fw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
+legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
+points(fw_min_rmse, val.errors_fw[fw_min_rmse], pch=20, col="red")
+title("fw_regfit.full")
+
+plot(val.errors_bk, ylab="Root MSE", pch=19, type="b")
+points(sqrt(bk_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
+legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
+points(bk_min_rmse, val.errors_bk[bk_min_rmse], pch=20, col="red")
+title("bk_regfit.full")
+
+plot(val.errors_sw, ylab="Root MSE", pch=19, type="b")
+points(sqrt(sw_regfit.full$rss[-1]/dim(resp_min_fd.train)[1]), col="blue", pch=19,type="b")
+legend("topright", legend=c("Training", "Testing"), col=c("blue", "black"), pch=19)
+points(sw_min_rmse, val.errors_sw[sw_min_rmse], pch=20, col="red")
+title("sw_regfit.full")
+```
+
+```{r}
+val.errors_bs[min_rmse]
+val.errors_fw[fw_min_rmse]
+val.errors_bk[bk_min_rmse]
+val.errors_sw[sw_min_rmse]
+```
+
+```{r}
+predict.regsubsets <- function(object, newdata, id, ...){
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form, newdata)
+  coefi <- coef(object, id=id)
+  mat[, names(coefi)]%*%coefi
+}
+```
+
+
+```{r}
+'set.seed(11)
+folds <- sample(rep(1:10, length=nrow(resp_min_fd.train)))
+table(folds)
+cv.errors <- matrix(NA, 10, 42)
+for (k in 1:10) {
+  best.fit <- regsubsets(formula(lm_full_upd_4), data = resp_min_fd.train[folds != k,], nvmax = 41, method = "seqrep")
+  for (i in 1:41) {
+    pred <- predict.regsubsets(best.fit, resp_min_fd.train[folds == k, ], id = i)
+    cv.errors[k,i] = mean((log(resp_min_fd.train$inc_resp_min_qy[folds == k]) - pred)^2)
+  }
+}
+rmse.cv <- sqrt(apply(cv.errors, 2, mean))
+true_min <- which.min(rmse.cv)
+plot(rmse.cv, pch=19, type="b")
+points(true_min , rmse.cv[true_min], pch=20, col="red")'
+```
+```{r}
+#rmse.cv[true_min]
+```
+
+
+### Ridge
+
+
+```{r}
+fit.ridge <- glmnet(x_train, y_train, alpha = 0)
+plot(fit.ridge, xvar = "lambda", label = TRUE)
+cv.ridge <- cv.glmnet(x_train, y_train, alpha = 0)
+plot(cv.ridge)
+```
+
+```{r}
+bestlam.ridge <- cv.ridge$lambda.min
+bestlam.ridge
+```
+
+```{r}
+plot(fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+
+```{r}
+ridge.rmse <- obtain.test.ori.rmse(fit.ridge, x_test, y_test, s = bestlam.ridge)
+ridge.rmse
+```
+
+```{r}
+least.rmse <- obtain.test.ori.rmse(fit.ridge, x_test, y_test)
+least.rmse
+```
+
+### Lasso
+
+```{r}
+fit.lasso <- glmnet(x_train, y_train, alpha = 1)
+plot(fit.lasso)
+```
+
+```{r}
+cv.ridge <- cv.glmnet(x_train, y_train, alpha = 1)
+plot(cv.ridge) ## lasso path plot
+bestlam.lasso <- cv.ridge$lambda.min
+```
+
+
+```{r }
+plot(fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+
+```{r }
+lasso.rmse <- obtain.test.ori.rmse(fit.lasso, x_test, y_test, s = bestlam.lasso)
+lasso.rmse
+```
+
+
+
+### Comparison
+
+```{r}
+gam2.rmse
+least.rmse
+ridge.rmse
+lasso.rmse
+```

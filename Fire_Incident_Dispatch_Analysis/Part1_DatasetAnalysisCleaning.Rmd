@@ -30,7 +30,6 @@ if (!require("leaps")) install.packages("leaps")
 if (!require("glmnet")) install.packages("glmnet")
 if (!require("car")) install.packages("car")
 if (!require("caTools")) install.packages("caTools")
-if (!require("mgcv")) install.packages("mgcv")
 if (!require("pROC")) install.packages("pRoc")
 
 if (!require("summarytools")) install.packages("summarytools")
@@ -44,21 +43,9 @@ if (!require("sf")) install.packages("sf")
 if (!require("geojsonio")) install.packages("geojsonio")
 if (!require("leaflet")) install.packages("leaflet")
 if (!require("broom")) install.packages("broom")
-if (!require("plotly")) install.packages("plotly")
 if (!require("gridExtra")) install.packages("gridExtra")
 
 # laoding of packages
-library(nnet)
-library(MASS)
-library(e1071)
-library(class)
-library(leaps)
-library(glmnet)
-library(car)
-library(caTools)
-library(mgcv)
-library(pROC)
-
 library(summarytools)
 library(dplyr)
 library(ggplot2)
@@ -840,13 +827,6 @@ fire_data_new <- fire_data_new %>% select(-c(zipcode, pol_prec, city_con_dist, c
 
 We decide to remove also the incident class since it contains too much category values which are summarised in the incident class group.
 
-Save the cleaned dataframe for the next part of the analysis.
-
-```{r}
-write.csv(fire_data_new, "datasets/fire_data_clean.csv", row.names=FALSE)
-```
-
-
 ```{r}
 print(dfSummary(fire_data_new, 
                 plain.ascii  = FALSE, 
@@ -1206,20 +1186,20 @@ In this section we plot additional data visualization focus on the geographical 
 3. **Congressiona_Districts.geojson** is the spatial dataframe that includes the geometry of each congressional districts
 
 
-```{r read fdny-firehouse-listing.csv}
+```{r}
 firefighter_stations <- read.csv("datasets/fdny-firehouse-listing.csv")
 
 head(firefighter_stations)
 ```
 
-```{r sumamry firefighter_stations}
+```{r}
 summary(firefighter_stations)
 ```
 
 
 We now start with the firefighter stations dataset. By first making a copy of the `fire_data_new` and setting the borough from the `firefighter_stations` dataset to factor in order to be easily merged with the copied fire_data dataset.
 
-```{r factors firefighter_stations}
+```{r}
 
 # make a copy of the fire_data
 fire_data_for_ffs <- fire_data_new
@@ -1235,7 +1215,7 @@ firefighter_stations <- na.omit(firefighter_stations)
 
 Now we want to get the number of firefighter station for each borough.
 
-```{r firefighter station per borough}
+```{r}
 stations_borough <- firefighter_stations %>%
                     group_by(borough) %>%
                     summarise(number_of_stations = n())
@@ -1245,7 +1225,7 @@ Now we want to get a summary of the incident count, the number of station and th
 
 This step is done twice we have to group both for **borough** and then for **congressional district**.
 
-```{r incident_per_station}
+```{r}
 count_inc_brough <- fire_data_for_ffs %>% group_by(borough) %>% summarise(incident_count = n())
 count_inc_cdist <- fire_data_for_ffs %>% group_by(cong_dist) %>% summarise(incident_count = n())
 
@@ -1268,7 +1248,7 @@ At this point we download the `.geojson` files that contain all the geometry of 
 
 Here we load the **NYC_BoroughBoundaries.geojson**.
 
-```{r geoj_nyc_borough}
+```{r}
 geoj_nyc_borough <- geojson_read("datasets/NYC_BoroughBoundaries.geojson",  what = "sp")
 geoj_nyc_borough <- setNames(geoj_nyc_borough, c("borough_code", "borough", "shape_area", "shape_leng"))
 geoj_nyc_borough$borough <- as.factor(geoj_nyc_borough$borough)
@@ -1277,7 +1257,7 @@ head(geoj_nyc_borough)
 ```
 
 And here the **Congressiona_Districts.geojson**.
-```{r geoj_nyc_cdist}
+```{r}
 geoj_nyc_cdist <- geojson_read("datasets/Congressional_Districts.geojson",  what = "sp")
 geoj_nyc_cdist$cong_dist <- as.factor(geoj_nyc_cdist$cong_dist)
 head(geoj_nyc_cdist)
@@ -1285,14 +1265,14 @@ head(geoj_nyc_cdist)
 
 And now we merge `geoj_nyc_borough` with `count_inc_brough` maintaining the **Spartial Data Frame** type.
 
-```{r merging geoj_nyc_borough and count_inc_brough}
+```{r}
 geoj_nyc_borough@data = data.frame(geoj_nyc_borough@data, count_inc_brough[match(geoj_nyc_borough@data$borough, count_inc_brough$borough),])
 geoj_nyc_borough@data$borough.1 <- NULL # remove the added column
 ```
 
 Here we are making the same step as before but this this with the `geoj_nyc_cdist` merging via `cong_dist`, again maintaining the **Spartial Data Frame** type.
 
-```{r merging geoj_nyc_cdist and count_inc_cdist}
+```{r}
 geoj_nyc_cdist@data = data.frame(geoj_nyc_cdist@data, count_inc_cdist[match(geoj_nyc_cdist@data$cong_dist, count_inc_cdist$cong_dist),])
 geoj_nyc_cdist@data$cong_dist.1 <- NULL # remove the added column
 ```
@@ -1301,7 +1281,7 @@ And finally we can plot the interactive maps using the `mapview` function.
 
 First for Incident Borough:
 
-```{r mapview borough}
+```{r}
 mapview(list(firefighter_stations_sdf, geoj_nyc_borough),
         zcol = list(NULL, "incident_count"),
         legend = list(FALSE, TRUE),
@@ -1313,7 +1293,7 @@ mapview(list(firefighter_stations_sdf, geoj_nyc_borough),
 
 And then for Congressional District:
 
-```{r mapview cong_dist}
+```{r}
 mapview(geoj_nyc_cdist,
         zcol = "incident_count",
         legend = TRUE,
@@ -1323,5 +1303,65 @@ mapview(geoj_nyc_cdist,
         alpha.regions = 0.5, aplha = 1)
 ```
 
+
+
+# Before Doing some Models
+
+As suggested by the professor we have opted to linear regression using as response:
+
+1- `inc_resp_min_qy` 
+2- `emergency_min_qy`
+
+Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+
+For both analysis we transform the relative response in **log scale** in order to simulate the behaviour of the Log-Norm distribution. Of course we have to verify that the linearty assumption are meet.
+
+So first things first let's check if there are some observations that have at least one of the two possible responses equal to zero, if so we have to remove then in order to apply next the log transformation.
+
+```{r}
+summary(fire_data_new %>% select(inc_resp_min_qy, emergency_min_qy))
+```
+
+Remove them.
+```{r}
+fire_data_new <- fire_data_new %>% filter(emergency_min_qy != 0)
+```
+
+
+Then we have to check the presence of correlation in the continuous predictors and if so deleting one or more of them. Thus here we are doing an initial chec of **multicollinearity** problems only in the numerical variable before once we create our for the future models. In order to do so compute the square of the correlation matrix.
+
+```{r}
+round(cor(fire_data_new %>% dplyr::select(where(is.numeric)))^2, digits=3)
+```
+As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, thus deceide to remove the sum of units. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis.
+
+```{r}
+fire_data_new <- fire_data_new %>% select(-c(total_assigned_unit))
+```
+
+
+Next before creating any model have to split the cleaned dataset into *train* and *test*, with 80% of the whole dataset for the train set and the remaining 20% for the test set.
+
+```{r}
+set.seed(43)
+split <- sample.split(fire_data_new, SplitRatio = 0.8)
+
+# Create training and testing sets
+fire_data.train <- subset(fire_data_new, split == TRUE)
+fire_data.test <- subset(fire_data_new, split == FALSE)
+
+rownames(fire_data.train) <- NULL
+rownames(fire_data.test) <- NULL
+
+dim(fire_data.train)
+dim(fire_data.test)
+```
+
+Save the cleaned train and test dataframe for the next part of the analysis.
+
+```{r}
+write.csv(fire_data.train, "datasets/fire_data_clean.train.csv", row.names=FALSE)
+write.csv(fire_data.test, "datasets/fire_data_clean.test.csv", row.names=FALSE)
+```
 
 

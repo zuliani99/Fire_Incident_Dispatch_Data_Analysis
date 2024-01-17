@@ -1,0 +1,2519 @@
+
+# Let's build some models (or at least try)
+
+As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_min_qy`, and then the `emergency_min_qy`. Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+
+For both analysis we transform the relative response in log scale in order to simulate the behaviour of the Exponential and Gamma GLMs.
+
+So first things first let's check if there are some observations that have at least one of the time differences equal to zero.
+
+```{r}
+summary(fire_data_new %>% select(disp_resp_min_qy, inc_travel_min_qy, inc_resp_min_qy, emergency_min_qy, ticket_time))
+```
+
+```{r}
+fire_data_new <- fire_data_new %>% filter(inc_travel_min_qy != 0, emergency_min_qy != 0)
+```
+
+
+Then we have to check the presence of correlation in the continuous predictor and if so deleting one or more of them.
+
+```{r}
+round(cor(fire_data_new %>% dplyr::select(where(is.numeric)))^2, digits=3)
+```
+As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, that's we we decided to remove from the dataframe. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis. We have done this step to remove **singluarities** for the future models.
+
+```{r}
+fire_data_new <- fire_data_new %>% select(-c(total_assigned_unit))
+```
+
+
+Next before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
+
+```{r}
+set.seed(43)
+split <- sample.split(fire_data_new, SplitRatio = 0.8)
+
+# Create training and testing sets
+fire_data.train <- subset(fire_data_new, split == TRUE)
+fire_data.test <- subset(fire_data_new, split == FALSE)
+
+rownames(fire_data.train) <- NULL
+rownames(fire_data.test) <- NULL
+
+dim(fire_data.train)
+dim(fire_data.test)
+```
+
+## Linear Regression???
+
+### Use inc_resp_min_qy as response
+
+In this section we use `inc_resp_min_qy` as response, so we have to remove all the time difference predictors that are computed with one of the two datetime that comes after the incident datetime, so all the other except for our actual response.
+
+
+```{r}
+# make a copy of the train and test
+resp_min_fd.train <- fire_data.train
+resp_min_fd.test <- fire_data.test
+
+# remove the future time differences
+resp_min_fd.train <- resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
+resp_min_fd.test <- resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
+```
+
+Let's build our first Linear Regression Model
+
+```{r}
+lm_irm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
+summary(lm_irm_full)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full)
+```
+
+Now we have to see if the linearity assumption are met and thus if we can use a linear regression model for our analysis.
+1. **Residuals vs Fitted plot**: here we can see if our residuals have a linear pattern and this is confermed by the straight horizontal red line. Even if,we have an higher amount of spreaded observations on the top of the red line.
+2. **Q-Q Residuals plot**: in this plot called also quantile - quantile residual plot and tells us if the residuals are normally distributed or not. If they follows the 45 degrees dotted line we can say so otherwise as in our case we can't say that are normally distributed, as we will see in much detail later.
+3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessments of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, something more or less in this case.
+4. **Residuals VS Leverage plot**: helps us to identify the influential points with the Cook's distance, so points that have influence on the regression line. And if some point feed in the area delimited by the dotted lines those points will be assigned as influential. In our case we do not have any observations that satisfy what we have just saied.
+
+```{r}
+qqPlot(residuals(lm_irm_full))
+```
+
+Much clearly the qqPlot tells that the data the residuals are not normally distributed indeed are heavily right skewed. Thus we can't trust the p-values and the estimation of the coefficients. 
+
+```{r}
+residualPlots(lm_irm_full)
+```
+
+Here instead we have a look of all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_irm_full)
+```
+
+
+The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is close to zero.
+
+
+```{r}
+lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ .)
+summary(lm_irm_full_upd)
+```
+
+Now remember that we can't compere the $R^2$ with the previous model since in the last one the response is on a different scale.
+
+Let's see how the residuals behaves in this new model.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd)
+```
+
+Like the previous model we can say the residuals follow a linear pattern much better that the previous model. Again we do not have any influential point. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+
+1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
+2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
+
+The qqPlot is buch clear here, where we can see also the residuals vs predictors and residuals vs fitted values.
+
+```{r}
+residualPlots(lm_irm_full_upd)
+qqPlot(residuals(lm_irm_full_upd))
+```
+
+Thus again the linear assumptions are not meet, mainly by the non normal distribution of the residuals.
+
+At this point we have decided in any case to investigate this behaviour trying to fix the non normality of the residuals by modifying the scale of some predictors and adding interaction term between them.
+
+We start by modifying the previous model by adding the interaction term and scaling the numbe of assigned units by the logarithm scale after having increased by a single units.
+
+```{r}
+lm_irm_full_upd_2 <- update(lm_irm_full_upd, log(inc_resp_min_qy) ~ . + engines_assigned : inc_class_group + time_of_day : day_type + log(ladders_assigned + 1) + log(engines_assigned + 1) + log(others_units_assigned + 1) + log(engines_assigned + 1) : inc_class_group)
+summary(lm_irm_full_upd_2)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_2)
+```
+
+
+```{r}
+residualPlots(lm_irm_full_upd_2)
+influenceIndexPlot(lm_irm_full_upd_2, vars = "Cook")
+```
+
+Again we it seems that nothing have changed regarding the qqPlot, whereas the distribution of fitted - residuals values is a little bit spreaded randomly. However here we have not constant variance on the residuals and we have also an influential point the 9504.
+
+Let's see the influential point and check how it behaves.
+
+```{r}
+resp_min_fd.train[9504,]
+```
+
+Now we investigate on why the 10036 observation is an influential point. Let's see how is the behaviour of the logarithm scale of the assigned units for the Structural Fire and see if we can find the observation 9504.
+ 
+```{r}
+infl_point <- subset(resp_min_fd.train, inc_class_group == "Medical MFAs")
+
+# Create a boxplot for Engines Assigned
+p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Engines Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "engines_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Engines Units Count",
+       x = "Engines Units", y = "Count")
+
+# Create a boxplot for Ladders Assigned
+p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Ladders Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "ladders_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Ladders Units Count",
+       x = "Ladders Units", y = "Count")
+
+# Create a boxplot for Other Units Assigned
+p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Other Units Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "others_units_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Other Units Count",
+       x = "Other Units", y = "Count")
+
+# Display the plots in a 1x3 grid
+grid.arrange(p1, p2, p3, ncol = 3)
+```
+
+
+And we see that the observed incident is far away from the distribution of others assigned units for the Medical MFAs incident, so we decide to remove this observation during the refitting of the last model.
+
+```{r}
+lm_irm_full_upd_3 <- update(lm_irm_full_upd_2, subset = -9504)
+summary(lm_irm_full_upd_3)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_3)
+```
+
+Again we are on the same situation of before.
+
+```{r}
+residualPlots(lm_irm_full_upd_3)
+qqPlot(residuals(lm_irm_full_upd_3))
+influenceIndexPlot(lm_irm_full_upd_3, vars = "Cook")
+summary(fitted(lm_irm_full_upd_3))
+```
+
+We try again to remove the influential point even if it is not outside the cook's band.
+
+```{r}
+resp_min_fd.train[16373,]
+```
+
+```{r}
+infl_point <- subset(resp_min_fd.train, inc_class_group == "Structural Fires")
+
+# Create a boxplot for Engines Assigned
+p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Engines Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "engines_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Engines Units Count",
+       x = "Engines Units", y = "Count")
+
+# Create a boxplot for Ladders Assigned
+p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Ladders Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "ladders_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Ladders Units Count",
+       x = "Ladders Units", y = "Count")
+
+# Create a boxplot for Other Units Assigned
+p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Other Units Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "others_units_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Other Units Count",
+       x = "Other Units", y = "Count")
+
+# Display the plots in a 1x3 grid
+grid.arrange(p1, p2, p3, ncol = 3)
+```
+
+
+```{r}
+lm_irm_full_upd_4 <- update(lm_irm_full_upd_2, subset = -c(16373, 9504))
+summary(lm_irm_full_upd_4)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_4)
+```
+
+
+```{r}
+residualPlots(lm_irm_full_upd_4)
+qqPlot(residuals(lm_irm_full_upd_4))
+influenceIndexPlot(lm_irm_full_upd_4, vars = "Cook")
+summary(fitted(lm_irm_full_upd_4))
+```
+
+
+However we are still in a situation of non normal distribution of the residuals thus we can't apply a linear regression model of the log scale of `inc_resp_min_qy`.
+Let's see if in the other type response the assumption of linearity are meet or not (spoiler...they are not verified again :( ).
+
+
+### Use emergency_min_qy as response
+
+Again we make a copy of the train and test. This time we decided to merge the assigned units in a single predictor deleting the single counts in order to see if we have an improvement on the qqPlots for the next models.
+
+
+```{r}
+# make a copy of the train and test
+emerg_min_fd.train <- fire_data.train
+emerg_min_fd.test <- fire_data.test
+
+emerg_min_fd.train$total_assigned_units = emerg_min_fd.train$engines_assigned + emerg_min_fd.train$ladders_assigned + emerg_min_fd.train$others_units_assigned
+emerg_min_fd.test$total_assigned_units = emerg_min_fd.test$engines_assigned + emerg_min_fd.test$ladders_assigned + emerg_min_fd.test$others_units_assigned
+
+# remove the future time differences and units counts
+emerg_min_fd.train <- emerg_min_fd.train %>% 
+  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
+emerg_min_fd.test <- emerg_min_fd.test %>% 
+  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
+```
+
+
+Fit a linear regression model with all the predictors.
+
+```{r}
+lm_em_full <- lm(emergency_min_qy ~ ., data = emerg_min_fd.train)
+summary(lm_em_full)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full)
+```
+
+Here the fitted values vs the residual are behaving in a liner relation but they are not randomly spread since we can view two / three clusters, the same thing discussion can be made for the Scale Location plot in which we can see that there is no constant variance. But again we are in a situation in which the residuals are not normally distributed as we can more clearly see in the following plot.
+
+```{r}
+qqPlot(residuals(lm_em_full))
+```
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_em_full)
+```
+
+We will try transform the response both using the logarithm scale and the power of 0.14. in order to see in we have an improvement on the distribution of the residuals.
+
+
+First by using the suggested power trasformation of 0.14.
+
+
+```{r}
+lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ .)
+summary(lm_em_full_014)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full_014)
+```
+
+```{r}
+qqPlot(residuals(lm_em_full_014))
+```
+
+In this case the two tails appear to be more homogeneous, however the situation is the same so we do not have normal distribution of residuals as we can see by the qqPlot.
+
+Trying the logarithm scale.
+
+```{r}
+lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ .)
+summary(lm_em_full_log)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full_log)
+```
+
+Again we note the presence of three clusters on the first and third plots, let's investigate a bit in order to gain some additional information.
+
+```{r}
+ggplot(lm_em_full_log, aes(x = .fitted, y = .resid)) +
+  geom_point(aes(color = inc_class_group)) +
+  geom_hline(yintercept = 0) +
+  labs(title = "Residuals VS Fitted",
+       x = "Fitted Values", y = "Residuals", color = "Incident Class Group")
+```
+
+The right cluster is for the Structural Fires, the middle one contain both Medical and NonMedical Emergencies with some Strictural and NonStructural Fires, and the left one contains NonMedical Emergencies and a small number of Medical one and Medical and NonMedical MFAs.
+
+```{r}
+qqPlot(residuals(lm_em_full_log))
+```
+
+Here the right tail is less far from the 95 confidence interval respect the previous model, but on the other hand the left tail is heavily skewed to the bottom of the interval. Indicating that again we do not reach the normal distribution of the residual.
+
+In conclusion we end up in a situation where the linearity assumptions are not meet thus we can't use a regression model to perform prediction even with the logarithm transformation of the response. It is much likely that a powerful methods should be taken into account for this analysis with a deeper study of the relationship between predictors.
+
+
+## Cast the anaysis to a Calssification task
+
+As mention before we decided like the professor suggested to us, to cast our regression problem in a classification problem by dividing the range of possible time difference response into 2 for a binary classification or more than 2 for a multi-classification task.
+
+We will use the same predictors of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
+
+So first thing first we have to decide the range of value for both of them.
+
+```{r}
+summary(fire_data_new$inc_resp_min_qy)
+```
+
+```{r}
+summary(fire_data_new$emergency_min_qy)
+```
+
+We start by considering a classical binary classification in which the threshold used as response is the mean of the respective responses, thus:
+
+```{r}
+# threshold for inc_resp_min_qy
+th_irm <- summary(fire_data_new$inc_resp_min_qy)[4]
+
+# threshold for emergency_min_qy
+th_eme <- summary(fire_data_new$emergency_min_qy)[4]
+```
+
+
+### Use the range of inc_resp_min_qy as response
+
+```{r}
+# make a copy of the train and test
+cl_resp_min_fd.train <- fire_data.train
+cl_resp_min_fd.test <- fire_data.test
+
+cl_resp_min_fd.train$fast_response <- cl_resp_min_fd.train$inc_resp_min_qy < th_irm
+cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_irm
+
+# remove the future time differences
+cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+```
+
+Fit our full **GLM** using the family **binomial**.
+
+```{r}
+res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
+summary(res_glm.fit_full)
+```
+
+
+We have an $AIC = 27793$, so in order to use this measure we have to compare this model with an other one. 
+
+Update the previous model by adding an interaction terms and removing the non-significant predictors.
+
+```{r}
+res_glm.fit_full_upd <- update(res_glm.fit_full, . ~ . - highest_al_level -ladders_assigned + engines_assigned : al_source_desc, data = cl_resp_min_fd.train)
+summary(res_glm.fit_full_upd)
+```
+
+```{r}
+AIC(res_glm.fit_full, res_glm.fit_full_upd)
+```
+
+We see a substantial decrease of the AIC for the updated model, thus we will use that one to make our predictions.
+
+```{r}
+res_glm.probs <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response")
+```
+
+The agreement between predictions and observed survival data is conveniently summarized with a confusion matrix. Below we assign a fast response incident if the estimated probability of being fast is larger than 0.5: 
+```{r}
+res_preds50 <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response") > 0.5
+table(preds = res_preds50, true = cl_resp_min_fd.test$fast_response)
+```
+The accuracy of the logistic regression classifier with the 50% threshold is:
+```{r}
+mean(res_preds50 == cl_resp_min_fd.test$fast_response)
+```
+
+Sensitivity and specificity are  ```r sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)``` / ```r sum(cl_resp_min_fd.test$fast_response == TRUE)``` = ```r round(sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)/sum(cl_resp_min_fd.test$fast_response == TRUE), 2)``` and ```r sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)``` / ```r sum(cl_resp_min_fd.test$fast_response == FALSE)``` = ```r round(sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)/sum(cl_resp_min_fd.test$fast_response == FALSE), 2)```, respectively.
+
+The ROC curve can be computed with package **pROC**:
+```{r message = FALSE}
+res_glm.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.probs, plot = TRUE, print.auc = TRUE)
+```
+
+The AUC for this logistic regression is ```r round(res_glm.roc$auc, 2)```. Now we use the function **coords** of package **pROC** to extract the coordinates of the ROC  at the *best point*, which corresponding to the maximum of the sum of sensitivity and specificity (see the online help of **coords** for more details
+```{r}
+coords(res_glm.roc, x = "best", ret = "all")
+```
+Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(res_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
+```{r}
+res_acc_glm <- coords(res_glm.roc, x = "best", ret = "all")$accuracy
+res_acc_glm
+```
+
+
+Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+
+We start by using **Ridge Regression**. First of all we have to create our model matrices.
+```{r}
+# model matrix for train
+x_train <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+y_train <- cl_resp_min_fd.train$fast_response
+
+# mode matrix for test
+x_test <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.test)
+y_test <- cl_resp_min_fd.test$fast_response
+```
+
+
+
+
+
+```{r}
+res_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(res_fit.ridge, xvar = "lambda", label = TRUE)
+res_cv.ridge <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(res_cv.ridge)
+```
+
+
+
+Here we can see the plot of the coefficients.
+The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
+
+$$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
+
+It tryies to minimize e RSS but the loss is modified by a penalty of the sum of squares of the coefficiets. So il $\lambda$ is big we want to have the sum of square of the coeffcients small, so that shrike the coefficeints towards zero. And if lambda becomes very bug all the coefficeints wil become zero.
+
+Unlike Best Subset Regression wich controls the complexity of the models by restricting thr number of variables, RIdge Regression keeps all the variables in and shrinke the coefficeints toward zero
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+res_cv.ridge$lambda.min
+```
+
+
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+res_bestlam.ridge <- res_cv.ridge$lambda.1se
+res_bestlam.ridge
+```
+
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r}
+plot(res_fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(res_bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_ridge <- predict(res_fit.ridge, s = res_bestlam.ridge, newx = x_test, type = "response") > 0.5
+table(preds = pred_ridge, true = y_test)
+```
+
+Finally the accuracy on the test set is:
+
+```{r}
+res_acc_glm_ridge <- mean(pred_ridge == y_test)
+res_acc_glm_ridge
+```
+
+Now is the turn of **Lasso**.
+
+
+The difference between Lasso and Ridge is the penalty of the sum of the coefficients, indeed the lasso loss function is the following one:
+
+$$L(lasso) = RSS + \lambda \sum_{j=1}^p |\beta_j|$$
+
+Instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients. This is also controlling the size of the coefficients, since by penalize the sum of absolute value, that's actually going to restrict some of the coefficients to be actually zero.
+
+
+
+```{r}
+res_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(res_fit.lasso)
+res_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(res_cv.lasso) ## lasso path plot
+```
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+res_cv.lasso$lambda.min
+```
+
+
+Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+res_bestlam.lasso <- res_cv.lasso$lambda.1se
+res_bestlam.lasso
+```
+
+
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r }
+plot(res_fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_lasso <- predict(res_fit.lasso, s = res_bestlam.lasso, newx = x_test, type = "response") > 0.5
+table(preds = pred_lasso, true = y_test)
+```
+
+
+Finally the accuracy on the test set is:
+
+```{r}
+res_acc_glm_lasso <- mean(pred_ridge == y_test)
+res_acc_glm_lasso
+```
+
+
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**.
+
+
+```{r}
+# use the fucntion formula to replicate the model formula of the second glml model
+res_lda.fit <- lda(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+res_lda.fit
+```
+The printed output of **lda** includes:
+
+- the a-priori probabilities of survival;
+- the group means.
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+```{r}
+res_lda.preds <- predict(res_lda.fit, newdata = cl_resp_min_fd.test, type = "response")
+table(preds = res_lda.preds$class, true = y_test)
+```
+
+
+And finally computing the accuracy:
+```{r}
+mean(res_lda.preds$class == y_test)
+```
+
+The ROC curve for linear discriminant analysis is
+```{r}
+res_lda.roc <- roc(y_test ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(res_lda.roc, x = "best", ret = "all")
+```
+The best choice for the threshold of linear discriminant analysis yields an accuracy of:
+```{r}
+res_acc_lda <- coords(res_lda.roc, x = "best", ret = "all")$accuracy
+res_acc_lda
+```
+
+
+
+Continuing with the analysis we try **Naive Bayes** algorithm.
+
+```{r}
+res_nb.fit <- naiveBayes(formula(res_glm.fit_full), data = cl_resp_min_fd.train)
+res_nb.fit
+```
+
+
+The output of **naiveBayes** contains:
+
+- the estimated a-priori probabilities; 
+- the estimated conditional probabilities for the qualitative variables;
+- the estimated group means and standard deviations for the quantitative variables.
+
+Prediction for the test set:
+```{r}
+res_nb.preds <- predict(res_nb.fit, newdata = cl_resp_min_fd.test)
+table(preds = res_nb.preds, true = cl_resp_min_fd.test$fast_response)
+```
+
+Predicted class probabilities can be obtained using the argument **type = "raw"**:
+```{r}
+nb.posterior <- predict(res_nb.fit, newdata = cl_resp_min_fd.test, type = "raw")
+head(nb.posterior)
+```
+
+ROC curve:
+```{r}
+res_nb.roc <- roc(cl_resp_min_fd.test$fast_response ~ nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(res_nb.roc, x = "best", ret = "all")
+```
+The accuracy for the best choice of the threshold of Naive Bayes is:
+```{r}
+res_acc_nb <- coords(res_nb.roc, x = "best", ret = "all")$accuracy
+res_acc_nb
+```
+
+
+
+
+And finally we deal with **KNN**. KNN has a random component because if there are ties among the nearest neighbors, then **R** will randomly sample so to break the ties. Therefore, we fix the seed of the pseudorandom generator in order to preserve the reproducibility of the results and then run KNN with k=5:
+```{r}
+set.seed(98765)
+res_preds.knn <- knn(train = x_train, test = x_test, cl = y_train , k = 5)
+```
+
+Confusion matrix for KNN with k=5:
+```{r}
+table(preds = res_preds.knn, true = y_test)
+```
+With a corresponding accuracy equal to:
+```{r}
+mean(res_preds.knn == y_test)
+```
+But what happens if we modify the number of neighbours? Below KNN is run for say k from 1 to 20:
+```{r}
+rates <- double(20)
+
+for (i in 1:20) {
+  tmp <- knn(train = x_train, test = x_test, cl = y_train, k = i)
+  rates[i] <- mean(tmp == y_test)
+}
+
+plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
+```
+
+The highest accuracy is obtained with k = ```{r} which.max(rates) ``` and with an accuracy of
+
+```{r}
+res_acc_knn <- max(rates)
+```
+
+
+Summary of results for the Classification task with `fast_response` as response:
+
+```{r}
+data.frame (
+  metho = c("GLM", "GLM_ridge", "GLM_lasso", "LDA", "Naive Bayes", "KNN"),
+  test_Accuracy = c(res_acc_glm, res_acc_glm_ridge, res_acc_glm_lasso, res_acc_lda, res_acc_nb, res_acc_knn)
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Use the range of emergency_min_qy as response
+
+```{r}
+# make a copy of the train and test
+cl_emerg_min_fd.train <- fire_data.train
+cl_emerg_min_fd.test <- fire_data.test
+
+cl_emerg_min_fd.train$fast_emergency <- cl_emerg_min_fd.train$emergency_min_qy < th_eme
+cl_emerg_min_fd.test$fast_emergency <- cl_emerg_min_fd.test$emergency_min_qy < th_eme
+
+# remove the future time differences and units counts
+cl_emerg_min_fd.train <- cl_emerg_min_fd.train %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
+cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
+```
+
+
+
+
+```{r}
+emerg_glm.fit <- glm(fast_emergency ~ ., data = cl_emerg_min_fd.train, family = "binomial")
+summary(emerg_glm.fit)
+```
+
+```{r}
+emerg_glm.fit_upd <- update(emerg_glm.fit, . ~ . - highest_al_level - day_typeWeek - ladders_assigned - disp_resp_min_qy - day_type + engines_assigned : al_source_desc, data = cl_emerg_min_fd.train)
+summary(emerg_glm.fit_upd)
+```
+
+```{r}
+AIC(emerg_glm.fit, emerg_glm.fit_upd)
+```
+
+```{r}
+emer_glm.probs <- predict(emerg_glm.fit_upd, newdata = cl_emerg_min_fd.test, type = "response")
+```
+
+The agreement between predictions and observed survival data is conveniently summarized with a confusion matrix. Below we assign a fast response incident if the estimated probability of being fast is larger than 0.5: 
+```{r}
+emer_preds50 <- emer_glm.probs > 0.5
+table(preds = emer_preds50, true = cl_emerg_min_fd.test$fast_emergency)
+```
+The accuracy of the logistic regression classifier with the 50% threshold is:
+```{r}
+mean(emer_preds50 == cl_emerg_min_fd.test$fast_emergency)
+```
+
+
+Sensitivity and specificity are  ```r sum(emer_preds50 == TRUE & cl_emerg_min_fd.test$fast_emergency == TRUE)``` / ```r sum(cl_emerg_min_fd.test$fast_emergency == TRUE)``` = ```r round(sum(emer_preds50 == TRUE & cl_emerg_min_fd.test$fast_emergency == TRUE)/sum(cl_emerg_min_fd.test$fast_emergency == TRUE), 2)``` and ```r sum(emer_preds50 == FALSE & cl_emerg_min_fd.test$fast_emergency == FALSE)``` / ```r sum(cl_emerg_min_fd.test$fast_emergency == FALSE)``` = ```r round(sum(emer_preds50 == FALSE & cl_emerg_min_fd.test$fast_emergency == FALSE)/sum(cl_emerg_min_fd.test$fast_emergency == FALSE), 2)```, respectively.
+
+The ROC curve can be computed with package **pROC**:
+```{r message = FALSE}
+emer_glm.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ emer_glm.probs, plot = TRUE, print.auc = TRUE)
+```
+
+The AUC for this logistic regression is ```r round(emer_glm.roc$auc, 2)```. Now we use the function **coords** of package **pROC** to extract the coordinates of the ROC  at the *best point*, which corresponding to the maximum of the sum of sensitivity and specificity (see the online help of **coords** for more details
+```{r}
+coords(emer_glm.roc, x = "best", ret = "all")
+```
+Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(emer_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
+```{r}
+emer_acc_glm <- coords(emer_glm.roc, x = "best", ret = "all")$accuracy
+emer_acc_glm
+```
+
+
+Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+
+We start by using **Ridge Regression**. First of all we have to create our model matrices.
+```{r}
+# model matrix for train
+x_train <- model.matrix(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.train)
+y_train <- cl_emerg_min_fd.train$fast_emergency
+
+# mode matrix for test
+x_test <- model.matrix(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.test)
+y_test <- cl_emerg_min_fd.test$fast_emergency
+```
+
+
+
+
+
+```{r}
+emer_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(emer_fit.ridge, xvar = "lambda", label = TRUE)
+emer_cv.ridge <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(emer_cv.ridge)
+```
+
+
+
+Here we can see the plot of the coefficients.
+
+```{r}
+emer_cv.ridge$lambda.min
+```
+
+
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+emer_bestlam.ridge <- emer_cv.ridge$lambda.1se
+emer_bestlam.ridge
+```
+
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r}
+plot(emer_fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(emer_bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_ridge <- predict(emer_fit.ridge, s = emer_bestlam.ridge, newx = x_test, type = "response") > 0.5
+table(preds = pred_ridge, true = y_test)
+```
+
+Finally the accuracy on the test set is:
+
+```{r}
+emer_acc_glm_ridge <- mean(pred_ridge == y_test)
+emer_acc_glm_ridge
+```
+
+Now is the turn of **Lasso**.
+
+
+
+```{r}
+emer_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(emer_fit.lasso)
+emer_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(emer_cv.lasso) ## lasso path plot
+```
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+emer_cv.lasso$lambda.min
+```
+
+
+Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+emer_bestlam.lasso <- emer_cv.lasso$lambda.1se
+emer_bestlam.lasso
+```
+
+
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r }
+plot(emer_fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(emer_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_lasso <- predict(emer_fit.lasso, s = emer_bestlam.lasso, newx = x_test, type = "response") > 0.5
+table(preds = pred_lasso, true = y_test)
+```
+
+
+Finally the accuracy on the test set is:
+
+```{r}
+emer_acc_glm_lasso <- mean(pred_ridge == y_test)
+emer_acc_glm_lasso
+```
+
+
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**.
+
+
+```{r}
+# use the function formula to replicate the model formula of the second glm model
+emer_lda.fit <- lda(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.train)
+emer_lda.fit
+```
+The printed output of **lda** includes:
+
+- the a-priori probabilities of survival;
+- the group means.
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+```{r}
+emer_lda.preds <- predict(emer_lda.fit, newdata = cl_emerg_min_fd.test, type = "response")
+table(preds = emer_lda.preds$class, true = y_test)
+```
+
+
+And finally computing the accuracy:
+```{r}
+mean(emer_lda.preds$class == y_test)
+```
+
+The ROC curve for linear discriminant analysis is
+```{r}
+emer_lda.roc <- roc(y_test ~ emer_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(emer_lda.roc, x = "best", ret = "all")
+```
+The best choice for the threshold of linear discriminant analysis yields an accuracy of:
+```{r}
+emer_acc_lda <- coords(emer_lda.roc, x = "best", ret = "all")$accuracy
+emer_acc_lda
+```
+
+
+
+Continuing with the analysis we try **Naive Bayes** algorithm.
+
+```{r}
+emer_nb.fit <- naiveBayes(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.test)
+emer_nb.fit
+```
+
+
+The output of **naiveBayes** contains:
+
+- the estimated a-priori probabilities; 
+- the estimated conditional probabilities for the qualitative variables;
+- the estimated group means and standard deviations for the quantitative variables.
+
+Prediction for the test set:
+```{r}
+emer_nb.preds <- predict(emer_nb.fit, newdata = cl_emerg_min_fd.test)
+table(preds = emer_nb.preds, true = cl_emerg_min_fd.test$fast_emergency)
+```
+
+Predicted class probabilities can be obtained using the argument **type = "raw"**:
+```{r}
+nb.posterior <- predict(emer_nb.fit, newdata = cl_emerg_min_fd.test, type = "raw")
+head(nb.posterior)
+```
+
+ROC curve:
+```{r}
+emer_nb.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(emer_nb.roc, x = "best", ret = "all")
+```
+The accuracy for the best choice of the threshold of Naive Bayes is:
+```{r}
+emer_acc_nb <- coords(emer_nb.roc, x = "best", ret = "all")$accuracy
+emer_acc_nb
+```
+
+
+
+
+And finally we deal with **KNN**. KNN has a random component because if there are ties among the nearest neighbors, then **R** will randomly sample so to break the ties. Therefore, we fix the seed of the pseudorandom generator in order to preserve the reproducibility of the results and then run KNN with k=5:
+```{r}
+set.seed(98765)
+emer_preds.knn <- knn(train = x_train, test = x_test, cl = y_train , k = 5)
+```
+
+Confusion matrix for KNN with k=5:
+```{r}
+table(preds = emer_preds.knn, true = y_test)
+```
+With a corresponding accuracy equal to:
+```{r}
+mean(emer_preds.knn == y_test)
+```
+But what happens if we modify the number of neighbours? Below KNN is run for say k from 1 to 20:
+```{r}
+rates <- double(20)
+
+for (i in 1:20) {
+  tmp <- knn(train = x_train, test = x_test, cl = y_train, k = i)
+  rates[i] <- mean(tmp == y_test)
+}
+
+plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
+```
+
+The highest accuracy is obtained with k = ```r which.max(rates)``` and with an accuracy of
+
+```{r}
+emer_acc_knn <- max(rates)
+```
+
+
+Summary of results for the Classification task with `fast_emergency` as response:
+
+```{r}
+data.frame (
+  metho = c("GLM", "GLM_ridge", "GLM_lasso", "LDA", "Naive Bayes", "KNN"),
+  test_Accuracy = c(emer_acc_glm, emer_acc_glm_ridge, emer_acc_glm_lasso, emer_acc_lda, emer_acc_nb, emer_acc_knn)
+)
+```
+
+
+
+
+
+
+
+
+# Conclusion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Let's build some models (or at least try)
+
+As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_min_qy`, and then the `emergency_min_qy`. Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+
+For both analysis we transform the relative response in log scale in order to simulate the behaviour of the Exponential and Gamma GLMs.
+
+So first things first let's check if there are some observations that have at least one of the time differences equal to zero.
+
+```{r}
+summary(fire_data_new %>% select(disp_resp_min_qy, inc_travel_min_qy, inc_resp_min_qy, emergency_min_qy, ticket_time))
+```
+
+```{r}
+fire_data_new <- fire_data_new %>% filter(inc_travel_min_qy != 0, emergency_min_qy != 0)
+```
+
+
+Then we have to check the presence of correlation in the continuous predictor and if so deleting one or more of them.
+
+```{r}
+round(cor(fire_data_new %>% dplyr::select(where(is.numeric)))^2, digits=3)
+```
+As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, that's we we decided to remove from the dataframe. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis. We have done this step to remove **singluarities** for the future models.
+
+```{r}
+fire_data_new <- fire_data_new %>% select(-c(total_assigned_unit))
+```
+
+
+Next before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
+
+```{r}
+set.seed(43)
+split <- sample.split(fire_data_new, SplitRatio = 0.8)
+
+# Create training and testing sets
+fire_data.train <- subset(fire_data_new, split == TRUE)
+fire_data.test <- subset(fire_data_new, split == FALSE)
+
+rownames(fire_data.train) <- NULL
+rownames(fire_data.test) <- NULL
+
+dim(fire_data.train)
+dim(fire_data.test)
+```
+
+## Linear Regression???
+
+### Use inc_resp_min_qy as response
+
+In this section we use `inc_resp_min_qy` as response, so we have to remove all the time difference predictors that are computed with one of the two datetime that comes after the incident datetime, so all the other except for our actual response.
+
+
+```{r}
+# make a copy of the train and test
+resp_min_fd.train <- fire_data.train
+resp_min_fd.test <- fire_data.test
+
+# remove the future time differences
+resp_min_fd.train <- resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
+resp_min_fd.test <- resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
+```
+
+Let's build our first Linear Regression Model
+
+```{r}
+lm_irm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
+summary(lm_irm_full)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full)
+```
+
+Now we have to see if the linearity assumption are met and thus if we can use a linear regression model for our analysis.
+1. **Residuals vs Fitted plot**: here we can see if our residuals have a linear pattern and this is confermed by the straight horizontal red line. Even if,we have an higher amount of spreaded observations on the top of the red line.
+2. **Q-Q Residuals plot**: in this plot called also quantile - quantile residual plot and tells us if the residuals are normally distributed or not. If they follows the 45 degrees dotted line we can say so otherwise as in our case we can't say that are normally distributed, as we will see in much detail later.
+3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessments of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, something more or less in this case.
+4. **Residuals VS Leverage plot**: helps us to identify the influential points with the Cook's distance, so points that have influence on the regression line. And if some point feed in the area delimited by the dotted lines those points will be assigned as influential. In our case we do not have any observations that satisfy what we have just saied.
+
+```{r}
+qqPlot(residuals(lm_irm_full))
+```
+
+Much clearly the qqPlot tells that the data the residuals are not normally distributed indeed are heavily right skewed. Thus we can't trust the p-values and the estimation of the coefficients. 
+
+```{r}
+residualPlots(lm_irm_full)
+```
+
+Here instead we have a look of all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_irm_full)
+```
+
+
+The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is close to zero.
+
+
+```{r}
+lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ .)
+summary(lm_irm_full_upd)
+```
+
+Now remember that we can't compere the $R^2$ with the previous model since in the last one the response is on a different scale.
+
+Let's see how the residuals behaves in this new model.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd)
+```
+
+Like the previous model we can say the residuals follow a linear pattern much better that the previous model. Again we do not have any influential point. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+
+1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
+2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
+
+The qqPlot is buch clear here, where we can see also the residuals vs predictors and residuals vs fitted values.
+
+```{r}
+residualPlots(lm_irm_full_upd)
+qqPlot(residuals(lm_irm_full_upd))
+```
+
+Thus again the linear assumptions are not meet, mainly by the non normal distribution of the residuals.
+
+At this point we have decided in any case to investigate this behaviour trying to fix the non normality of the residuals by modifying the scale of some predictors and adding interaction term between them.
+
+We start by modifying the previous model by adding the interaction term and scaling the numbe of assigned units by the logarithm scale after having increased by a single units.
+
+```{r}
+lm_irm_full_upd_2 <- update(lm_irm_full_upd, log(inc_resp_min_qy) ~ . + engines_assigned : inc_class_group + time_of_day : day_type + log(ladders_assigned + 1) + log(engines_assigned + 1) + log(others_units_assigned + 1) + log(engines_assigned + 1) : inc_class_group)
+summary(lm_irm_full_upd_2)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_2)
+```
+
+
+```{r}
+residualPlots(lm_irm_full_upd_2)
+influenceIndexPlot(lm_irm_full_upd_2, vars = "Cook")
+```
+
+Again we it seems that nothing have changed regarding the qqPlot, whereas the distribution of fitted - residuals values is a little bit spreaded randomly. However here we have not constant variance on the residuals and we have also an influential point the 9504.
+
+Let's see the influential point and check how it behaves.
+
+```{r}
+resp_min_fd.train[9504,]
+```
+
+Now we investigate on why the 10036 observation is an influential point. Let's see how is the behaviour of the logarithm scale of the assigned units for the Structural Fire and see if we can find the observation 9504.
+ 
+```{r}
+infl_point <- subset(resp_min_fd.train, inc_class_group == "Medical MFAs")
+
+# Create a boxplot for Engines Assigned
+p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Engines Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "engines_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Engines Units Count",
+       x = "Engines Units", y = "Count")
+
+# Create a boxplot for Ladders Assigned
+p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Ladders Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "ladders_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Ladders Units Count",
+       x = "Ladders Units", y = "Count")
+
+# Create a boxplot for Other Units Assigned
+p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Other Units Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "others_units_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Other Units Count",
+       x = "Other Units", y = "Count")
+
+# Display the plots in a 1x3 grid
+grid.arrange(p1, p2, p3, ncol = 3)
+```
+
+
+And we see that the observed incident is far away from the distribution of others assigned units for the Medical MFAs incident, so we decide to remove this observation during the refitting of the last model.
+
+```{r}
+lm_irm_full_upd_3 <- update(lm_irm_full_upd_2, subset = -9504)
+summary(lm_irm_full_upd_3)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_3)
+```
+
+Again we are on the same situation of before.
+
+```{r}
+residualPlots(lm_irm_full_upd_3)
+qqPlot(residuals(lm_irm_full_upd_3))
+influenceIndexPlot(lm_irm_full_upd_3, vars = "Cook")
+summary(fitted(lm_irm_full_upd_3))
+```
+
+We try again to remove the influential point even if it is not outside the cook's band.
+
+```{r}
+resp_min_fd.train[16373,]
+```
+
+```{r}
+infl_point <- subset(resp_min_fd.train, inc_class_group == "Structural Fires")
+
+# Create a boxplot for Engines Assigned
+p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Engines Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "engines_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Engines Units Count",
+       x = "Engines Units", y = "Count")
+
+# Create a boxplot for Ladders Assigned
+p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Ladders Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "ladders_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Ladders Units Count",
+       x = "Ladders Units", y = "Count")
+
+# Create a boxplot for Other Units Assigned
+p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
+  geom_boxplot() +
+  ggtitle("Other Units Assigned") +
+  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "others_units_assigned"] + 1)), col = "red", pch = 16) +
+  labs(title = "Other Units Count",
+       x = "Other Units", y = "Count")
+
+# Display the plots in a 1x3 grid
+grid.arrange(p1, p2, p3, ncol = 3)
+```
+
+
+```{r}
+lm_irm_full_upd_4 <- update(lm_irm_full_upd_2, subset = -c(16373, 9504))
+summary(lm_irm_full_upd_4)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_4)
+```
+
+
+```{r}
+residualPlots(lm_irm_full_upd_4)
+qqPlot(residuals(lm_irm_full_upd_4))
+influenceIndexPlot(lm_irm_full_upd_4, vars = "Cook")
+summary(fitted(lm_irm_full_upd_4))
+```
+
+
+However we are still in a situation of non normal distribution of the residuals thus we can't apply a linear regression model of the log scale of `inc_resp_min_qy`.
+Let's see if in the other type response the assumption of linearity are meet or not (spoiler...they are not verified again :( ).
+
+
+### Use emergency_min_qy as response
+
+Again we make a copy of the train and test. This time we decided to merge the assigned units in a single predictor deleting the single counts in order to see if we have an improvement on the qqPlots for the next models.
+
+
+```{r}
+# make a copy of the train and test
+emerg_min_fd.train <- fire_data.train
+emerg_min_fd.test <- fire_data.test
+
+emerg_min_fd.train$total_assigned_units = emerg_min_fd.train$engines_assigned + emerg_min_fd.train$ladders_assigned + emerg_min_fd.train$others_units_assigned
+emerg_min_fd.test$total_assigned_units = emerg_min_fd.test$engines_assigned + emerg_min_fd.test$ladders_assigned + emerg_min_fd.test$others_units_assigned
+
+# remove the future time differences and units counts
+emerg_min_fd.train <- emerg_min_fd.train %>% 
+  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
+emerg_min_fd.test <- emerg_min_fd.test %>% 
+  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
+```
+
+
+Fit a linear regression model with all the predictors.
+
+```{r}
+lm_em_full <- lm(emergency_min_qy ~ ., data = emerg_min_fd.train)
+summary(lm_em_full)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full)
+```
+
+Here the fitted values vs the residual are behaving in a liner relation but they are not randomly spread since we can view two / three clusters, the same thing discussion can be made for the Scale Location plot in which we can see that there is no constant variance. But again we are in a situation in which the residuals are not normally distributed as we can more clearly see in the following plot.
+
+```{r}
+qqPlot(residuals(lm_em_full))
+```
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_em_full)
+```
+
+We will try transform the response both using the logarithm scale and the power of 0.14. in order to see in we have an improvement on the distribution of the residuals.
+
+
+First by using the suggested power trasformation of 0.14.
+
+
+```{r}
+lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ .)
+summary(lm_em_full_014)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full_014)
+```
+
+```{r}
+qqPlot(residuals(lm_em_full_014))
+```
+
+In this case the two tails appear to be more homogeneous, however the situation is the same so we do not have normal distribution of residuals as we can see by the qqPlot.
+
+Trying the logarithm scale.
+
+```{r}
+lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ .)
+summary(lm_em_full_log)
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full_log)
+```
+
+Again we note the presence of three clusters on the first and third plots, let's investigate a bit in order to gain some additional information.
+
+```{r}
+ggplot(lm_em_full_log, aes(x = .fitted, y = .resid)) +
+  geom_point(aes(color = inc_class_group)) +
+  geom_hline(yintercept = 0) +
+  labs(title = "Residuals VS Fitted",
+       x = "Fitted Values", y = "Residuals", color = "Incident Class Group")
+```
+
+The right cluster is for the Structural Fires, the middle one contain both Medical and NonMedical Emergencies with some Strictural and NonStructural Fires, and the left one contains NonMedical Emergencies and a small number of Medical one and Medical and NonMedical MFAs.
+
+```{r}
+qqPlot(residuals(lm_em_full_log))
+```
+
+Here the right tail is less far from the 95 confidence interval respect the previous model, but on the other hand the left tail is heavily skewed to the bottom of the interval. Indicating that again we do not reach the normal distribution of the residual.
+
+In conclusion we end up in a situation where the linearity assumptions are not meet thus we can't use a regression model to perform prediction even with the logarithm transformation of the response. It is much likely that a powerful methods should be taken into account for this analysis with a deeper study of the relationship between predictors.
+
+
+## Cast the anaysis to a Calssification task
+
+As mention before we decided like the professor suggested to us, to cast our regression problem in a classification problem by dividing the range of possible time difference response into 2 for a binary classification or more than 2 for a multi-classification task.
+
+We will use the same predictors of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
+
+So first thing first we have to decide the range of value for both of them.
+
+```{r}
+summary(fire_data_new$inc_resp_min_qy)
+```
+
+```{r}
+summary(fire_data_new$emergency_min_qy)
+```
+
+We start by considering a classical binary classification in which the threshold used as response is the mean of the respective responses, thus:
+
+```{r}
+# threshold for inc_resp_min_qy
+th_irm <- summary(fire_data_new$inc_resp_min_qy)[4]
+
+# threshold for emergency_min_qy
+th_eme <- summary(fire_data_new$emergency_min_qy)[4]
+```
+
+
+### Use the range of inc_resp_min_qy as response
+
+```{r}
+# make a copy of the train and test
+cl_resp_min_fd.train <- fire_data.train
+cl_resp_min_fd.test <- fire_data.test
+
+cl_resp_min_fd.train$fast_response <- cl_resp_min_fd.train$inc_resp_min_qy < th_irm
+cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_irm
+
+# remove the future time differences
+cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+```
+
+Fit our full **GLM** using the family **binomial**.
+
+```{r}
+res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
+summary(res_glm.fit_full)
+```
+
+
+We have an $AIC = 27793$, so in order to use this measure we have to compare this model with an other one. 
+
+Update the previous model by adding an interaction terms and removing the non-significant predictors.
+
+```{r}
+res_glm.fit_full_upd <- update(res_glm.fit_full, . ~ . - highest_al_level -ladders_assigned + engines_assigned : al_source_desc, data = cl_resp_min_fd.train)
+summary(res_glm.fit_full_upd)
+```
+
+```{r}
+AIC(res_glm.fit_full, res_glm.fit_full_upd)
+```
+
+We see a substantial decrease of the AIC for the updated model, thus we will use that one to make our predictions.
+
+```{r}
+res_glm.probs <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response")
+```
+
+The agreement between predictions and observed survival data is conveniently summarized with a confusion matrix. Below we assign a fast response incident if the estimated probability of being fast is larger than 0.5: 
+```{r}
+res_preds50 <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response") > 0.5
+table(preds = res_preds50, true = cl_resp_min_fd.test$fast_response)
+```
+The accuracy of the logistic regression classifier with the 50% threshold is:
+```{r}
+mean(res_preds50 == cl_resp_min_fd.test$fast_response)
+```
+
+Sensitivity and specificity are  ```r sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)``` / ```r sum(cl_resp_min_fd.test$fast_response == TRUE)``` = ```r round(sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)/sum(cl_resp_min_fd.test$fast_response == TRUE), 2)``` and ```r sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)``` / ```r sum(cl_resp_min_fd.test$fast_response == FALSE)``` = ```r round(sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)/sum(cl_resp_min_fd.test$fast_response == FALSE), 2)```, respectively.
+
+The ROC curve can be computed with package **pROC**:
+```{r message = FALSE}
+res_glm.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.probs, plot = TRUE, print.auc = TRUE)
+```
+
+The AUC for this logistic regression is ```r round(res_glm.roc$auc, 2)```. Now we use the function **coords** of package **pROC** to extract the coordinates of the ROC  at the *best point*, which corresponding to the maximum of the sum of sensitivity and specificity (see the online help of **coords** for more details
+```{r}
+coords(res_glm.roc, x = "best", ret = "all")
+```
+Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(res_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
+```{r}
+res_acc_glm <- coords(res_glm.roc, x = "best", ret = "all")$accuracy
+res_acc_glm
+```
+
+
+Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+
+We start by using **Ridge Regression**. First of all we have to create our model matrices.
+```{r}
+# model matrix for train
+x_train <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+y_train <- cl_resp_min_fd.train$fast_response
+
+# mode matrix for test
+x_test <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.test)
+y_test <- cl_resp_min_fd.test$fast_response
+```
+
+
+
+
+
+```{r}
+res_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(res_fit.ridge, xvar = "lambda", label = TRUE)
+res_cv.ridge <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(res_cv.ridge)
+```
+
+
+
+Here we can see the plot of the coefficients.
+The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
+
+$$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
+
+It tryies to minimize e RSS but the loss is modified by a penalty of the sum of squares of the coefficiets. So il $\lambda$ is big we want to have the sum of square of the coeffcients small, so that shrike the coefficeints towards zero. And if lambda becomes very bug all the coefficeints wil become zero.
+
+Unlike Best Subset Regression wich controls the complexity of the models by restricting thr number of variables, RIdge Regression keeps all the variables in and shrinke the coefficeints toward zero
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+res_cv.ridge$lambda.min
+```
+
+
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+res_bestlam.ridge <- res_cv.ridge$lambda.1se
+res_bestlam.ridge
+```
+
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r}
+plot(res_fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(res_bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_ridge <- predict(res_fit.ridge, s = res_bestlam.ridge, newx = x_test, type = "response") > 0.5
+table(preds = pred_ridge, true = y_test)
+```
+
+Finally the accuracy on the test set is:
+
+```{r}
+res_acc_glm_ridge <- mean(pred_ridge == y_test)
+res_acc_glm_ridge
+```
+
+Now is the turn of **Lasso**.
+
+
+The difference between Lasso and Ridge is the penalty of the sum of the coefficients, indeed the lasso loss function is the following one:
+
+$$L(lasso) = RSS + \lambda \sum_{j=1}^p |\beta_j|$$
+
+Instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients. This is also controlling the size of the coefficients, since by penalize the sum of absolute value, that's actually going to restrict some of the coefficients to be actually zero.
+
+
+
+```{r}
+res_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(res_fit.lasso)
+res_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(res_cv.lasso) ## lasso path plot
+```
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+res_cv.lasso$lambda.min
+```
+
+
+Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+res_bestlam.lasso <- res_cv.lasso$lambda.1se
+res_bestlam.lasso
+```
+
+
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r }
+plot(res_fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_lasso <- predict(res_fit.lasso, s = res_bestlam.lasso, newx = x_test, type = "response") > 0.5
+table(preds = pred_lasso, true = y_test)
+```
+
+
+Finally the accuracy on the test set is:
+
+```{r}
+res_acc_glm_lasso <- mean(pred_ridge == y_test)
+res_acc_glm_lasso
+```
+
+
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**.
+
+
+```{r}
+# use the fucntion formula to replicate the model formula of the second glml model
+res_lda.fit <- lda(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+res_lda.fit
+```
+The printed output of **lda** includes:
+
+- the a-priori probabilities of survival;
+- the group means.
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+```{r}
+res_lda.preds <- predict(res_lda.fit, newdata = cl_resp_min_fd.test, type = "response")
+table(preds = res_lda.preds$class, true = y_test)
+```
+
+
+And finally computing the accuracy:
+```{r}
+mean(res_lda.preds$class == y_test)
+```
+
+The ROC curve for linear discriminant analysis is
+```{r}
+res_lda.roc <- roc(y_test ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(res_lda.roc, x = "best", ret = "all")
+```
+The best choice for the threshold of linear discriminant analysis yields an accuracy of:
+```{r}
+res_acc_lda <- coords(res_lda.roc, x = "best", ret = "all")$accuracy
+res_acc_lda
+```
+
+
+
+Continuing with the analysis we try **Naive Bayes** algorithm.
+
+```{r}
+res_nb.fit <- naiveBayes(formula(res_glm.fit_full), data = cl_resp_min_fd.train)
+res_nb.fit
+```
+
+
+The output of **naiveBayes** contains:
+
+- the estimated a-priori probabilities; 
+- the estimated conditional probabilities for the qualitative variables;
+- the estimated group means and standard deviations for the quantitative variables.
+
+Prediction for the test set:
+```{r}
+res_nb.preds <- predict(res_nb.fit, newdata = cl_resp_min_fd.test)
+table(preds = res_nb.preds, true = cl_resp_min_fd.test$fast_response)
+```
+
+Predicted class probabilities can be obtained using the argument **type = "raw"**:
+```{r}
+nb.posterior <- predict(res_nb.fit, newdata = cl_resp_min_fd.test, type = "raw")
+head(nb.posterior)
+```
+
+ROC curve:
+```{r}
+res_nb.roc <- roc(cl_resp_min_fd.test$fast_response ~ nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(res_nb.roc, x = "best", ret = "all")
+```
+The accuracy for the best choice of the threshold of Naive Bayes is:
+```{r}
+res_acc_nb <- coords(res_nb.roc, x = "best", ret = "all")$accuracy
+res_acc_nb
+```
+
+
+
+
+And finally we deal with **KNN**. KNN has a random component because if there are ties among the nearest neighbors, then **R** will randomly sample so to break the ties. Therefore, we fix the seed of the pseudorandom generator in order to preserve the reproducibility of the results and then run KNN with k=5:
+```{r}
+set.seed(98765)
+res_preds.knn <- knn(train = x_train, test = x_test, cl = y_train , k = 5)
+```
+
+Confusion matrix for KNN with k=5:
+```{r}
+table(preds = res_preds.knn, true = y_test)
+```
+With a corresponding accuracy equal to:
+```{r}
+mean(res_preds.knn == y_test)
+```
+But what happens if we modify the number of neighbours? Below KNN is run for say k from 1 to 20:
+```{r}
+rates <- double(20)
+
+for (i in 1:20) {
+  tmp <- knn(train = x_train, test = x_test, cl = y_train, k = i)
+  rates[i] <- mean(tmp == y_test)
+}
+
+plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
+```
+
+The highest accuracy is obtained with k = ```{r} which.max(rates) ``` and with an accuracy of
+
+```{r}
+res_acc_knn <- max(rates)
+```
+
+
+Summary of results for the Classification task with `fast_response` as response:
+
+```{r}
+data.frame (
+  metho = c("GLM", "GLM_ridge", "GLM_lasso", "LDA", "Naive Bayes", "KNN"),
+  test_Accuracy = c(res_acc_glm, res_acc_glm_ridge, res_acc_glm_lasso, res_acc_lda, res_acc_nb, res_acc_knn)
+)
+```
+
+
+
+
+
+
+
+
+
+
+### Use the range of emergency_min_qy as response
+
+```{r}
+# make a copy of the train and test
+cl_emerg_min_fd.train <- fire_data.train
+cl_emerg_min_fd.test <- fire_data.test
+
+cl_emerg_min_fd.train$fast_emergency <- cl_emerg_min_fd.train$emergency_min_qy < th_eme
+cl_emerg_min_fd.test$fast_emergency <- cl_emerg_min_fd.test$emergency_min_qy < th_eme
+
+# remove the future time differences and units counts
+cl_emerg_min_fd.train <- cl_emerg_min_fd.train %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
+cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
+```
+
+
+
+
+```{r}
+emerg_glm.fit <- glm(fast_emergency ~ ., data = cl_emerg_min_fd.train, family = "binomial")
+summary(emerg_glm.fit)
+```
+
+```{r}
+emerg_glm.fit_upd <- update(emerg_glm.fit, . ~ . - highest_al_level - day_typeWeek - ladders_assigned - disp_resp_min_qy - day_type + engines_assigned : al_source_desc, data = cl_emerg_min_fd.train)
+summary(emerg_glm.fit_upd)
+```
+
+```{r}
+AIC(emerg_glm.fit, emerg_glm.fit_upd)
+```
+
+```{r}
+emer_glm.probs <- predict(emerg_glm.fit_upd, newdata = cl_emerg_min_fd.test, type = "response")
+```
+
+The agreement between predictions and observed survival data is conveniently summarized with a confusion matrix. Below we assign a fast response incident if the estimated probability of being fast is larger than 0.5: 
+```{r}
+emer_preds50 <- emer_glm.probs > 0.5
+table(preds = emer_preds50, true = cl_emerg_min_fd.test$fast_emergency)
+```
+The accuracy of the logistic regression classifier with the 50% threshold is:
+```{r}
+mean(emer_preds50 == cl_emerg_min_fd.test$fast_emergency)
+```
+
+
+Sensitivity and specificity are  ```r sum(emer_preds50 == TRUE & cl_emerg_min_fd.test$fast_emergency == TRUE)``` / ```r sum(cl_emerg_min_fd.test$fast_emergency == TRUE)``` = ```r round(sum(emer_preds50 == TRUE & cl_emerg_min_fd.test$fast_emergency == TRUE)/sum(cl_emerg_min_fd.test$fast_emergency == TRUE), 2)``` and ```r sum(emer_preds50 == FALSE & cl_emerg_min_fd.test$fast_emergency == FALSE)``` / ```r sum(cl_emerg_min_fd.test$fast_emergency == FALSE)``` = ```r round(sum(emer_preds50 == FALSE & cl_emerg_min_fd.test$fast_emergency == FALSE)/sum(cl_emerg_min_fd.test$fast_emergency == FALSE), 2)```, respectively.
+
+The ROC curve can be computed with package **pROC**:
+```{r message = FALSE}
+emer_glm.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ emer_glm.probs, plot = TRUE, print.auc = TRUE)
+```
+
+The AUC for this logistic regression is ```r round(emer_glm.roc$auc, 2)```. Now we use the function **coords** of package **pROC** to extract the coordinates of the ROC  at the *best point*, which corresponding to the maximum of the sum of sensitivity and specificity (see the online help of **coords** for more details
+```{r}
+coords(emer_glm.roc, x = "best", ret = "all")
+```
+Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(emer_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
+```{r}
+emer_acc_glm <- coords(emer_glm.roc, x = "best", ret = "all")$accuracy
+emer_acc_glm
+```
+
+
+Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+
+We start by using **Ridge Regression**. First of all we have to create our model matrices.
+```{r}
+# model matrix for train
+x_train <- model.matrix(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.train)
+y_train <- cl_emerg_min_fd.train$fast_emergency
+
+# mode matrix for test
+x_test <- model.matrix(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.test)
+y_test <- cl_emerg_min_fd.test$fast_emergency
+```
+
+
+
+
+
+```{r}
+emer_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(emer_fit.ridge, xvar = "lambda", label = TRUE)
+emer_cv.ridge <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+plot(emer_cv.ridge)
+```
+
+
+
+Here we can see the plot of the coefficients.
+
+```{r}
+emer_cv.ridge$lambda.min
+```
+
+
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+emer_bestlam.ridge <- emer_cv.ridge$lambda.1se
+emer_bestlam.ridge
+```
+
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r}
+plot(emer_fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(emer_bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_ridge <- predict(emer_fit.ridge, s = emer_bestlam.ridge, newx = x_test, type = "response") > 0.5
+table(preds = pred_ridge, true = y_test)
+```
+
+Finally the accuracy on the test set is:
+
+```{r}
+emer_acc_glm_ridge <- mean(pred_ridge == y_test)
+emer_acc_glm_ridge
+```
+
+Now is the turn of **Lasso**.
+
+
+
+```{r}
+emer_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(emer_fit.lasso)
+emer_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(emer_cv.lasso) ## lasso path plot
+```
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+emer_cv.lasso$lambda.min
+```
+
+
+Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+emer_bestlam.lasso <- emer_cv.lasso$lambda.1se
+emer_bestlam.lasso
+```
+
+
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r }
+plot(emer_fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+abline(v = log(emer_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+
+```{r}
+pred_lasso <- predict(emer_fit.lasso, s = emer_bestlam.lasso, newx = x_test, type = "response") > 0.5
+table(preds = pred_lasso, true = y_test)
+```
+
+
+Finally the accuracy on the test set is:
+
+```{r}
+emer_acc_glm_lasso <- mean(pred_ridge == y_test)
+emer_acc_glm_lasso
+```
+
+
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**.
+
+
+```{r}
+# use the function formula to replicate the model formula of the second glm model
+emer_lda.fit <- lda(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.train)
+emer_lda.fit
+```
+The printed output of **lda** includes:
+
+- the a-priori probabilities of survival;
+- the group means.
+
+We make the prediction on the test set and analyse the result by the confusion matrix.
+```{r}
+emer_lda.preds <- predict(emer_lda.fit, newdata = cl_emerg_min_fd.test, type = "response")
+table(preds = emer_lda.preds$class, true = y_test)
+```
+
+
+And finally computing the accuracy:
+```{r}
+mean(emer_lda.preds$class == y_test)
+```
+
+The ROC curve for linear discriminant analysis is
+```{r}
+emer_lda.roc <- roc(y_test ~ emer_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(emer_lda.roc, x = "best", ret = "all")
+```
+The best choice for the threshold of linear discriminant analysis yields an accuracy of:
+```{r}
+emer_acc_lda <- coords(emer_lda.roc, x = "best", ret = "all")$accuracy
+emer_acc_lda
+```
+
+
+
+Continuing with the analysis we try **Naive Bayes** algorithm.
+
+```{r}
+emer_nb.fit <- naiveBayes(formula(emerg_glm.fit_upd), data = cl_emerg_min_fd.test)
+emer_nb.fit
+```
+
+
+The output of **naiveBayes** contains:
+
+- the estimated a-priori probabilities; 
+- the estimated conditional probabilities for the qualitative variables;
+- the estimated group means and standard deviations for the quantitative variables.
+
+Prediction for the test set:
+```{r}
+emer_nb.preds <- predict(emer_nb.fit, newdata = cl_emerg_min_fd.test)
+table(preds = emer_nb.preds, true = cl_emerg_min_fd.test$fast_emergency)
+```
+
+Predicted class probabilities can be obtained using the argument **type = "raw"**:
+```{r}
+nb.posterior <- predict(emer_nb.fit, newdata = cl_emerg_min_fd.test, type = "raw")
+head(nb.posterior)
+```
+
+ROC curve:
+```{r}
+emer_nb.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+coords(emer_nb.roc, x = "best", ret = "all")
+```
+The accuracy for the best choice of the threshold of Naive Bayes is:
+```{r}
+emer_acc_nb <- coords(emer_nb.roc, x = "best", ret = "all")$accuracy
+emer_acc_nb
+```
+
+
+
+
+And finally we deal with **KNN**. KNN has a random component because if there are ties among the nearest neighbors, then **R** will randomly sample so to break the ties. Therefore, we fix the seed of the pseudorandom generator in order to preserve the reproducibility of the results and then run KNN with k=5:
+```{r}
+set.seed(98765)
+emer_preds.knn <- knn(train = x_train, test = x_test, cl = y_train , k = 5)
+```
+
+Confusion matrix for KNN with k=5:
+```{r}
+table(preds = emer_preds.knn, true = y_test)
+```
+With a corresponding accuracy equal to:
+```{r}
+mean(emer_preds.knn == y_test)
+```
+But what happens if we modify the number of neighbours? Below KNN is run for say k from 1 to 20:
+```{r}
+rates <- double(20)
+
+for (i in 1:20) {
+  tmp <- knn(train = x_train, test = x_test, cl = y_train, k = i)
+  rates[i] <- mean(tmp == y_test)
+}
+
+plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
+```
+
+The highest accuracy is obtained with k = ```r which.max(rates)``` and with an accuracy of
+
+```{r}
+emer_acc_knn <- max(rates)
+```
+
+
+Summary of results for the Classification task with `fast_emergency` as response:
+
+```{r}
+data.frame (
+  metho = c("GLM", "GLM_ridge", "GLM_lasso", "LDA", "Naive Bayes", "KNN"),
+  test_Accuracy = c(emer_acc_glm, emer_acc_glm_ridge, emer_acc_glm_lasso, emer_acc_lda, emer_acc_nb, emer_acc_knn)
+)
+```
+
+
+
+# Conclusion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Linear Regression???
+
+## Use inc_resp_min_qy as response
+
+In this section we use `inc_resp_min_qy` as response, thus we omit `emergency_time_qy` since it is a future difference of time that is not know at prediction time. 
+
+
+```{r}
+# make a copy of the train and test
+resp_min_fd.train <- fire_data.train
+resp_min_fd.test <- fire_data.test
+
+# remove the future time differences
+resp_min_fd.train <- resp_min_fd.train %>% select(-c(emergency_min_qy))
+resp_min_fd.test <- resp_min_fd.test %>% select(-c(emergency_min_qy))
+```
+
+Let's build our first Linear Regression Model
+
+```{r}
+lm_irm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
+summary(lm_irm_full)
+```
+By the summary we can see that the model $R^2$ tell us that we are able explain around the $12.83\%$ of the total variability of the data and also the Adjusted R-squared which penalise the complexity of our model tell us the same story.
+
+Let's interpret the complete model by first specifying what categorical variable are contained in the intercept:
+
+- inc_borough = Bronx
+- cong_dist = 3
+- al_source_desc = PHONE
+- al_index_desc = DEFAULT RECORD
+- highest_al_level = First Alarm
+- inc_class_group = Medical Emergencies
+- day_type = Weekday
+- working_hour = FALSE
+- time_of_day = Night
+- tua_is_one = FALSE
+
+So the intercept explain the mean response time in minutes for an incident with the cited values of categorical predictors and the value of the three following numeric predictors:
+
+- engines_assiged = 0
+- ladders_assigned = 0
+- others_units_assigned = 0
+
+Speaking a little bit about the **p-value** we can mention that:
+
+- **inc_boroughBrooklyn, inc_boroughManhattan, inc_boroughStaten Island** have all significant p-value, this indicate the difference on mean response time for an incident having the intercept predictor values and an incident with the same predictor except the borough being one of the respective three. All of three have a decreasing effect on the mean response time.
+- Regarding the **cong_dist** only **cong_dist5** and **cong_dist12** have a significant p-value, both with a decreasing effect on the mean response time of an incident with the intercept characteristics except the *cong_dist* being on of the specified two.
+- Interestingly **al_source_descOthers** indicate a big decrease on the mean response time respect the reference level.
+- **engines_assigned** and **others_units_assigned** have a decreasing effect on the mean response time with the latter being quite reasonable significant and the former being heavely significant. On the other hand **ladders_assigned** is significant but differently respect the other two units measure its effect is increase the mean response time of the reference level.
+- **day_typeWeekend** is significant with an decrease effect on the mean response time for the reference level. The same discussion can be made for **working_hourTRUE**.
+- **time_of_dayEvening** and **tua_is_oneY** are significant with the first having a decreasing and the second having a increasing effect on the reference level.
+
+At this point we can analyse the **regression diagnostic plots**:
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full)
+```
+
+Now we have to see if the linearity assumption are met and thus if we can use a linear regression model for our analysis.
+
+1. **Residuals vs Fitted plot**: here we can see if our residuals have a linear pattern and this is confermed by the straight horizontal red line. Even if,we have an higher amount of spreaded observations on the top of the red line.
+2. **Q-Q Residuals plot**: in this plot called also quantile - quantile residual plot and tells us if the residuals are normally distributed or not. If they follows the 45 degrees dotted line we can say so otherwise as in our case we can't say that are normally distributed, as we will see in much detail later.
+3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessments of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, in our case we are not particullary happy.
+4. **Residuals VS Leverage plot**: helps us to identify the influential points with the Cook's distance, so points that have influence on the regression line. And if some point feed in the area delimited by the dotted lines those points will be assigned as influential. In our case we do not have any observations that satisfy what we have just saied
+
+Moreover we better analyse the distribution of the residuals by using the `qqPlot` from the `car` package. This will produce a better plot of the distribution of the residuals with relative confidence interval ban in blue.
+
+```{r}
+qqPlot(residuals(lm_irm_full))
+```
+
+Much clearly the qqPlot tells that the data the residuals are not normally distributed indeed are heavily right skewed. Thus we can't trust the p-values and the estimation of the coefficients. 
+
+
+Here instead we have a look of all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
+```{r}
+residualPlots(lm_irm_full)
+```
+
+Both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
+
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_irm_full)
+```
+
+
+The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is close to zero.
+
+
+But before updating the full model scaling the response by logarithm let's check if we have **multicollinearity**. To do so we use the `vif` function by the `car` package.
+
+```{r}
+vif(lm_irm_full)
+```
+We decide to use as rule of thumb $GIF 10 5$ no **strong multicollinearity** problem, otherwise we have to delete some predictors since in some sense their information is kept by others.
+In our case we decide to remove the following predictors:
+
+- cong_dist
+- inc_class_group
+- highest_al_level 
+
+
+Let's update our model scaling the response to the logarithm scale and remove the previously listed predictors.
+
+```{r}
+lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ . - cong_dist - inc_class_group - highest_al_level)
+vif(lm_irm_full_upd)
+```
+No multicollinearity problem, now we can analyse the sumamry of the updated model.
+
+```{r}
+summary(lm_irm_full_upd)
+```
+
+Now remember that we can't compere the $R^2$ with the previous model since in the last one the response is on a different scale.
+
+Regarding the reference level here the discussion is the same as the previous one, except the fact that the reference level is on logarithm scale so the predictors have a increasing or decreasing effect on the mean logarithm response time.
+
+
+Now we analyse the **regression diagnostic plots** for the log response model.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd)
+```
+
+Like the previous model we can say the residuals follow a linear pattern much better that the previous model. Again we do not have any influential point. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+
+1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
+2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
+
+Let's  much clearly analyse the new qqPlot.
+
+```{r}
+qqPlot(residuals(lm_irm_full_upd))
+```
+So in other word this “S” shaped qqPlot with a linear portion in the middle suggests the data have more extreme values (or outliers) than the normal distribution in the tails. This indicate the following statements:
+
+1- The coefficient estimates are unbiased and consistent.
+2- The Standard Error could be wrong.
+3- The p-value are usually much lower respect to the real p-value. This means that a p-value in the order of 0.0001 could not be really significant.
+
+
+Now we can see the residuals vs predictors and residuals vs fitted values.
+
+```{r}
+residualPlots(lm_irm_full_upd)
+```
+Again both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
+
+Thus again the linear assumptions are not meet, mainly by the non normal distribution of the residuals.
+
+
+
+
+At this point we have decided in any case to investigate this behaviour trying to fix the non normality of the residuals by modifying the scale of some predictors and adding interaction term between them.
+
+So the edits we will perform are the following one:
+
+- Removing the non significant predictors
+- Adding the interaction terms
+- Scaling the number of assigned units by the logarithm scale after having increased by a single units
+
+
+```{r}
+lm_irm_full_upd_2 <- update(lm_irm_full_upd, . ~ . - others_units_assigned - al_source_desc- engines_assigned + engines_assigned : al_source_desc)
+summary(lm_irm_full_upd_2)
+vif(lm_irm_full_upd_2)
+```
+
+Now we can compare this $R^2 = 0.1789$ with the one of the previous model which is $R^2 = 0.1674$. So with the newest model we have explained $1.15\%$ much variability respect to the initial model. 
+
+Let's interpret the updated model. The intercept level is composed by the following predictors:
+
+Let's interpret the complete model by first specifying what categorical variable are contained in the intercept:
+
+- inc_borough = Broonx
+- al_source_desc = PHONE
+- al_index_desc = DEFAULT RECORD
+- highest_al_level = First Alarm
+- inc_class_group = Medical Emergencies
+- day_type = Weekday
+- working_hour = FALSE
+- time_of_day = Night
+- tua_is_one = FALSE
+
+So the intercept explain the mean  logarithm response time for an incident with the cited values of categorical predictors and the value of the three following numeric predictors:
+
+- log(engines_assigned + 1) = 0
+- log(others_units_assigned + 1) = 0
+- log(ladders_assigned + 1) = 0
+- ladders_assigned = 0
+
+Since we add an interaction term, let's discuss who it behaves in our model:
+
+**al_source_descEMS:log(engines_assigned + 1)**: the estimated coefficients represent the difference in increase of logarithm response time of an incident called via EMS per logarithm of the engine assigned + 1.
+
+The same discussion can be done for the other categorical value of **al_source_desc**.
+
+Next the **scaled logarithm assigned units** indicates the average decrease in terms of logarithm response time per logarithm assigned units + 1 for the intercept level.
+
+
+Now we analyse the **regression diagnostic plots**.
+```{r}
+par(mfrow=c(2,2))
+plot(lm_irm_full_upd_2)
+```
+
+1. **Residuals vs Fitted plot**: here we can see that the residuals have a linear pattern.
+2. **Q-Q Residuals plot**: again we do not have the situation of normal distribution of the residuals, as we will have a closer look soon.
+3. **Scaled-Location / Spread-Location plot**: homoscedasticity quite reached even if we have a light curvature
+4. **Residuals VS Leverage plot**: we can't see any influential pont
+
+
+```{r}
+qqPlot(residuals(lm_irm_full_upd_2))
+```
+Unefortunately the situation is the same as the previous described one.
+
+```{r}
+residualPlots(lm_irm_full_upd_2)
+influenceIndexPlot(lm_irm_full_upd_2, vars = "Cook")
+```
+The test statistics regarding the residuals vs numerical predictor said that can not reject the null hypothesis that there is a lack of relationship except in the case of
+`log(others_units_assigned + 1)` in which the p-value is slightly significant. Regarding the Tukey Test in the other have the p-value have a vary low significant level indicating that there isn't any relationship between the residuals and fitted values.
+
+In conclusion unfortunately we can't apply linear regression on the log scale of `inc_resp_min_qy`, the main problem is the distribution of the residuals with is not normal thus we can't really trust the p-values end the estimation of the model coefficients.
+
+Let's see if in the other type response the assumption of linearity are meet or not (spoiler...they are not verified again :( ).
+
+
+## Use emergency_min_qy as response
+
+Fit a linear regression model with all the predictors.
+
+```{r}
+lm_em_full <- lm(emergency_min_qy ~ ., data = fire_data.train)
+summary(lm_em_full)
+```
+The first thing that come to our eyes is the $R^2$ value which in this case is $0.3359$ thus we explain more or less 1/3 of the variability of the data. Also the Adjusted R-squared has a similar value which is $0.3349$.  
+
+Now let's interpret the complete model by first specifying what categorical variable are contained in the intercept:
+
+- inc_borough = Bronx
+- cong_dist = 3
+- al_source_desc = PHONE
+- al_index_desc = DEFAULT RECORD
+- highest_al_level = First Alarm
+- inc_class_group = Medical Emergencies
+- day_type = Weekday
+- working_hour = FALSE
+- time_of_day = Night
+- tua_is_one = FALSE
+
+So the intercept explain the mean emergency time in minutes taken for an incident with the cited values of categorical predictors and the value of the three following numeric predictors:
+
+- engines_assiged = 0
+- ladders_assigned = 0
+- others_units_assigned = 0
+
+Speaking a little bit about the **p-value** we can mention that:
+
+- **inc_boroughBrooklyn, inc_boroughManhattan, inc_boroughStaten Island** have all significant p-value, this indicate the difference on mean emergency time aken in minutes for an incident having the intercept predictor values and an incident with the same predictor except the borough being one of the respective three. All of three have a decreasing effect on the mean emergency time, respectively of $-5.72702$ minutes, $-3.05730$ minutes and $-4.41859$ minutes.
+- Regarding the **cong_dist** only **cong_dist13** has a statistically high significant p-value, it has a increase effect on the mean emergency time in minutes of an incident with the intercept characteristics except the *cong_dist*.
+
+
+
+
+- Interestingly **al_source_descOthers** indicate a big decrease on the mean response time respect the reference level.
+- **engines_assigned** and **others_units_assigned** have a decreasing effect on the mean response time with the latter being quite reasonable significant and the former being heavely significant. On the other hand **ladders_assigned** is significant but differently respect the other two units measure its effect is increase the mean response time of the reference level.
+- **day_typeWeekend** is significant with an decrease effect on the mean response time for the reference level. The same discussion can be made for **working_hourTRUE**.
+- **time_of_dayEvening** and **tua_is_oneY** are significant with the first having a decreasing and the second having a increasing effect on the reference level.
+
+
+
+Now we analyse the **regression diagnostic plots** for the log response model.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full)
+```
+
+Here the fitted values vs the residual are behaving in a liner relation but they are not randomly spread since we can view three or even more clusters , the same thing discussion can be made for the Scale Location plot in which we can see that there is no constant variance. But again we are in a situation in which the residuals are not normally distributed as we can more clearly see in the following plot.
+
+```{r}
+qqPlot(residuals(lm_em_full))
+```
+
+Let's have a look of the possible power transformation of the response.
+
+```{r}
+powerTransform(lm_em_full)
+```
+
+We will try transform the response both using the logarithm scale and the power of 0.14. in order to see in we have an improvement on the distribution of the residuals.
+
+First by using the suggested power trasformation of 0.14.
+
+
+```{r}
+lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ .)
+summary(lm_em_full_014)
+```
+
+Let's see the residuals.
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full_014)
+```
+
+```{r}
+qqPlot(residuals(lm_em_full_014))
+```
+
+In this case the two tails appear to be more homogeneous and better respect the presious model and even the previous analysis, however the final conclusion is the same so we do not have normal distribution of residuals as we can see by the qqPlot.
+
+Trying the logarithm scale.
+
+```{r}
+lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ .)
+summary(lm_em_full_log)
+```
+Remember again that we can't compare the $R^2$ between the former and the latter model since the response is not on the same scale.
+
+View the residuals.
+
+```{r}
+par(mfrow=c(2,2))
+plot(lm_em_full_log)
+```
+
+1. The **Residuals VS Fitted** seems pretty good since the red line follow reasonably well the 0 horizontal dotted line, indicating our residual have a linear relation with the fitted values
+2. The **Q-Q Plots** again tells us that we are not in a situation of normally distributed residuals since we have the two tail that goes outside the 95% confidence interval.
+3. In the **Scale - Location Plots** homoscedasticity is quite satisfied even if we have a slight decreasing trend and we have a peek on the middle.
+4. In the **Residuals VS Leverage Plots** we can see that there are not any influential point that we have to process and investigate.
+
+Intrestingly again we note the presence of three clusters on the Residuals VS Fitted and Scale - Location plot, let's investigate a bit in order to gain some additional information.
+
+```{r}
+ggplot(lm_em_full_log, aes(x = .fitted, y = .resid)) +
+  geom_point(aes(color = inc_class_group)) +
+  geom_hline(yintercept = 0) +
+  labs(title = "Residuals VS Fitted",
+       x = "Fitted Values", y = "Residuals", color = "Incident Class Group")
+```
+
+The right cluster is for the *Structural Fires*, the middle one contain both *Medical* and *NonMedical Emergencies* with some *Strictural* and *NonStructural Fires*, and the left one contains *NonMedical Emergencies* and a small number of *Medical* one and *Medical* and *NonMedical MFAs*.
+
+```{r}
+qqPlot(residuals(lm_em_full_log))
+```
+
+Here the right tail is less far from the 95 confidence interval respect the previous model, but on the other hand the left tail is heavily skewed to the bottom of the interval. Indicating that again we do not reach the normal distribution of the residual.
+
+In conclusion we end up in a situation where the linearity assumptions are not meet thus we can't use a regression model to perform prediction even with the logarithm transformation of the response. It is much likely that a powerful methods should be taken into account for this analysis with a deeper study of the relationship between predictors.
+
+

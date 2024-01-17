@@ -2,7 +2,13 @@
 title: "Part 2 - Linear Regression"
 author: "Zuliani Riccardo"
 date: "17/1/2024"
-output: html_document
+output: 
+  html_document: 
+    toc: true
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -12,75 +18,24 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 ```
 
 # Load Libraries
-```{r, cache=TRUE}
-fire_data <- read.csv("datasets/fire_data_clean.csv")
-
-head(fire_data)
-
-dim(fire_data)
-```
-
-
-
-# Let's build some models (or at least try)
-
-First things first load the cleaned dataset.
-```{r}
-fire_data_clean <- read.csv()
-```
-
-
-As suggested by the professor we have opted to linear regression using as response:
-
-1- `inc_resp_min_qy` 
-2- `emergency_min_qy`
-
-Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
-
-For both analysis we transform the relative response in **log scale** in order to simulate the behaviour of the Log-Norm distribution. Of course we have to verify that the linearty assumption are meet.
-
-So first things first let's check if there are some observations that have at least one of the two possible responses equal to zero, if so we have to remove then in order to apply next the log transformation.
 
 ```{r}
-summary(fire_data_clean %>% select(inc_resp_min_qy, emergency_min_qy))
-```
-
-Remove them.
-```{r}
-fire_data_clean <- fire_data_clean %>% filter(emergency_min_qy != 0)
-```
-
-
-Then we have to check the presence of correlation in the continuous predictors and if so deleting one or more of them. Thus here we are doing an initial chec of **multicollinearity** problems only in the numerical variable before once we create our for the future models. In order to do so compute the square of the correlation matrix.
-
-```{r}
-round(cor(fire_data_clean %>% dplyr::select(where(is.numeric)))^2, digits=3)
-```
-As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, thus deceide to remove the sum of units. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis.
-
-```{r}
-fire_data_clean <- fire_data_clean %>% select(-c(total_assigned_unit))
+library(leaflet)
+library(car)
+library(caTools)
+library(tidyverse)
 ```
 
 
-Next before creating any model have to split the cleaned dataset into *train* and *test*, with 80% of the whole dataset for the train set and the remaining 20% for the test set.
-
-```{r}
-set.seed(43)
-split <- sample.split(fire_data_clean, SplitRatio = 0.8)
-
-# Create training and testing sets
-fire_data.train <- subset(fire_data_clean, split == TRUE)
-fire_data.test <- subset(fire_data_clean, split == FALSE)
-
-rownames(fire_data.train) <- NULL
-rownames(fire_data.test) <- NULL
-
-dim(fire_data.train)
-dim(fire_data.test)
-```
 
 # Linear Regression???
+
+First things first load the cleaned train and test datasets.
+```{r, cache=TRUE}
+fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv")
+fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv")
+```
+
 
 ## Use inc_resp_min_qy as response
 
@@ -88,9 +43,9 @@ In this section we use `inc_resp_min_qy` as response, thus we omit `emergency_ti
 
 
 ```{r}
-# make a copy of the train and test
-resp_min_fd.train <- fire_data.train
-resp_min_fd.test <- fire_data.test
+# load train and test dataframes
+resp_min_fd.train <- fire_data_clean.train
+resp_min_fd.test <- fire_data_clean.test
 
 # remove the future time differences
 resp_min_fd.train <- resp_min_fd.train %>% select(-c(emergency_min_qy))
@@ -311,7 +266,7 @@ Let's see if in the other type response the assumption of linearity are meet or 
 Fit a linear regression model with all the predictors.
 
 ```{r}
-lm_em_full <- lm(emergency_min_qy ~ ., data = fire_data.train)
+lm_em_full <- lm(emergency_min_qy ~ ., data = fire_data_clean.train)
 summary(lm_em_full)
 ```
 The first thing that come to our eyes is the $R^2$ value which in this case is $0.3359$ thus we explain more or less 1/3 of the variability of the data. Also the Adjusted R-squared has a similar value which is $0.3349$.  
