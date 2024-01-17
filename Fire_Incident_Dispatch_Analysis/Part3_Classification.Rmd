@@ -80,8 +80,8 @@ cl_resp_min_fd.train <- fire_data_clean.train
 cl_resp_min_fd.test <- fire_data_clean.test
 
 # set the factorial response via the early computed threshold
-cl_resp_min_fd.train$fast_response <- as.factor(cl_resp_min_fd.train$inc_resp_min_qy < th_irm)
-cl_resp_min_fd.test$fast_response <- as.factor(cl_resp_min_fd.test$inc_resp_min_qy < th_irm)
+cl_resp_min_fd.train$fast_response <- cl_resp_min_fd.train$inc_resp_min_qy < th_irm
+cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_irm
 
 # remove the future time differences
 cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(emergency_min_qy, inc_resp_min_qy))
@@ -94,7 +94,7 @@ cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(emergency_min_qy, inc_r
 Fit our full **Logistic Regression** model.
 
 ```{r}
-res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
+res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = "binomial")
 summary(res_glm.fit_full)
 ```
 
@@ -166,9 +166,9 @@ y_test <- cl_resp_min_fd.test$fast_response
 
 
 ```{r}
-res_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+res_fit.ridge <- glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
 plot(res_fit.ridge, xvar = "lambda", label = TRUE)
-res_cv.ridge <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 0)
+res_cv.ridge <- cv.glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
 plot(res_cv.ridge)
 ```
 
