@@ -13,12 +13,15 @@ editor_options:
 
 ```{r setup, include=FALSE}
 #knitr::opts_chunk$set(echo = TRUE) #, cache=TRUE
+
+# REMEMBER THO CHANCGE THE WORKING DIRECTORY
 setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
 ```
 
 # Loads & Install Packages
 
-```{r including library}
+```{r}
+# installation of packages in case the user has not installed yet
 if (!require("nnet")) install.packages("nnet")
 if (!require("MASS")) install.packages("MASS")
 if (!require("e1071")) install.packages("e1071")
@@ -36,6 +39,7 @@ if (!require("ggplot2")) install.packages("ggplot2")
 if (!require("tidyverse")) install.packages("tidyverse")
 if (!require("lubridate")) install.packages("lubridate")
 if (!require("mapview")) install.packages("mapview")
+if (!require("leafpop")) install.packages("leafpop")
 if (!require("sf")) install.packages("sf")
 if (!require("geojsonio")) install.packages("geojsonio")
 if (!require("leaflet")) install.packages("leaflet")
@@ -43,7 +47,7 @@ if (!require("broom")) install.packages("broom")
 if (!require("plotly")) install.packages("plotly")
 if (!require("gridExtra")) install.packages("gridExtra")
 
-
+# laoding of packages
 library(nnet)
 library(MASS)
 library(e1071)
@@ -67,6 +71,7 @@ library(leaflet)
 library(broom)
 library(plotly)
 library(gridExtra)
+library(leafpop)
 ```
 
 
@@ -100,12 +105,12 @@ In this analysis we have restricted the analysis only on the *last 50.000 observ
 21. **INCIDENT_CLOSE_DATETIME**: The date and time that the incident was closed in the dispatch system.
 
 22. **VALID_DISPATCH_RSPNS_TIME_INDC**: Indicates that the components comprising the generation of the DISPATCH_RESPONSE_SECONDS_QY are valid.
-23. **DISPATCH_RESPONSE_SECONDS_QY**: The elapsed time in seconds between the incident_datetime and the first_assignment_datetime.
+23. **DISPATCH_RESPONSE_SECONDS_QY**: The elapsed time in seconds between the INCIDENT_DATETIME and the FIRST_ASSIGNMENT_DATETIME.
 
 24. **VALID_INCIDENT_RSPNS_TIME_INDC**: Indicates that the components comprising the generation of the INCIDENT_RESPONSE_SECONDS_QY are valid.
-25. **INCIDENT_RESPONSE_SECONDS_QY**: The elapsed time in seconds between the incident_datetime and the first_onscene_datetime.
+25. **INCIDENT_RESPONSE_SECONDS_QY**: The elapsed time in seconds between the INCIDENT_DATETIME and the FIRST_ON_SCENE_DATETIME.
 
-26. **INCIDENT_TRAVEL_TM_SECONDS_QY**: The elapsed time in seconds between the first_assignment_datetime and the first_onscene_datetime.
+26. **INCIDENT_TRAVEL_TM_SECONDS_QY**: The elapsed time in seconds between the FIRST_ASSIGNMENT_DATETIME and the FIRST_ON_SCENE_DATETIME.
 
 
 27. **ENGINES_ASSIGNED_QUANTITY**: The number of engine units assigned to the incident.
@@ -113,20 +118,38 @@ In this analysis we have restricted the analysis only on the *last 50.000 observ
 29. **OTHER_UNITS_ASSIGNED_QUANTITY**: The number of  units that are not engines or ladders that were assigned to the incident.
 
 
-Regarding the response we will try create two different analysis. One with the aim to predict the **INCIDENT_RESPONSE_SECONDS_QY** and the other to predict the **EMERGENCY_TIME** which is the time difference between the **FIRST_ON_SCENE_DATETIME** and **INCIDENT_CLOSE_DATETIME**. Both analysis use a linear regression model, however we will see that the assumption for applying the linear regression will be not meet, thus we will simplify our project moving into classification, dividing in two or more ranges the two responses.
+## Analysis Description
+
+We will try create two different analysis.
+
+1. The aim to predict the **INCIDENT_RESPONSE_SECONDS_QY** which is the time difference between the **FIRST_ON_SCENE_DATETIME** and **INCIDENT_DATETIME**.
+2. The focus is to predict the **EMERGENCY_TIME** which is the time difference between the **FIRST_ON_SCENE_DATETIME** and **INCIDENT_CLOSE_DATETIME**. 
+
+Both analysis use a linear regression model, however we will see that the assumption for applying the linear regression will be not meet, thus we will simplify our project moving into classification, dividing in two or more ranges the two responses. In addition of this we will perform data exploration and cleaning, studying the presence or not of pattern of NA values and invalid values.
+
+Next we will try to answer the following questions:
+
+- Is more likely to have a quick response or emergency time living in a particular borough / city council district?
+- Is more likely to have a quick response or emergency time in a particular time of the day?
+- Is more likely to have a quick response or emergency time on the week end?
+- Is more likely to have a quick response or emergency time respect to the class emergency?
+- Is more likely to have a quick response or emergency time respect to the assigned units?
 
 
 # Data Exlporation and Cleaning
 
-The first step is always to read the dataset and plot the first 5 observations
-```{r read dataset, cache=TRUE}
+The first step is always to read the dataset, plot the first 5 observations and see its whole dimension.
+
+```{r, cache=TRUE}
 fire_data <- read.csv("datasets/Fire_Incident_Dispatch_Data_last_50k.csv")
 
 head(fire_data)
+
+dim(fire_data)
 ```
 
 Use `dfSummary` from `summarytool` in order to have a complete and clear sumamry of the dataset.
-```{r print datset}
+```{r}
 print(dfSummary(fire_data, 
                 plain.ascii  = FALSE, 
                 style        = "multiline", 
@@ -136,45 +159,47 @@ print(dfSummary(fire_data,
                 method = 'render')
 ```
 
-Now we rename all the columns in order to be smaller whenever we plot graphs.
-```{r predictor renaming}
+Now we decide to rename all the columns in order to be of smaller length once we plots some charts.
+```{r}
 fire_data <- fire_data %>%
-            rename(id = STARFIRE_INCIDENT_ID, datetime = INCIDENT_DATETIME, al_borough = ALARM_BOX_BOROUGH,
-                   al_number = ALARM_BOX_NUMBER,al_location = ALARM_BOX_LOCATION, inc_borough = INCIDENT_BOROUGH,
-                   zipcode = ZIPCODE, pol_prec = POLICEPRECINCT, city_con_dist = CITYCOUNCILDISTRICT,
-                   commu_dist = COMMUNITYDISTRICT, commu_sc_dist = COMMUNITYSCHOOLDISTRICT,
-                   cong_dist = CONGRESSIONALDISTRICT, al_source_desc = ALARM_SOURCE_DESCRIPTION_TX,
-                   al_index_desc = ALARM_LEVEL_INDEX_DESCRIPTION, highest_al_level = HIGHEST_ALARM_LEVEL,
-                   inc_class = INCIDENT_CLASSIFICATION, inc_class_group = INCIDENT_CLASSIFICATION_GROUP,
-                   first_ass_datetime = FIRST_ASSIGNMENT_DATETIME, first_act_datetime = FIRST_ACTIVATION_DATETIME,
-                   first_onscene_datetime = FIRST_ON_SCENE_DATETIME, inc_close_datetime = INCIDENT_CLOSE_DATETIME, 
+  rename(id = STARFIRE_INCIDENT_ID, datetime = INCIDENT_DATETIME, al_borough = ALARM_BOX_BOROUGH,
+    al_number = ALARM_BOX_NUMBER,al_location = ALARM_BOX_LOCATION, inc_borough = INCIDENT_BOROUGH,
+    zipcode = ZIPCODE, pol_prec = POLICEPRECINCT, city_con_dist = CITYCOUNCILDISTRICT,
+    commu_dist = COMMUNITYDISTRICT, commu_sc_dist = COMMUNITYSCHOOLDISTRICT,
+    cong_dist = CONGRESSIONALDISTRICT, al_source_desc = ALARM_SOURCE_DESCRIPTION_TX,
+    al_index_desc = ALARM_LEVEL_INDEX_DESCRIPTION, highest_al_level = HIGHEST_ALARM_LEVEL,
+    inc_class = INCIDENT_CLASSIFICATION, inc_class_group = INCIDENT_CLASSIFICATION_GROUP,
+    first_ass_datetime = FIRST_ASSIGNMENT_DATETIME, first_act_datetime = FIRST_ACTIVATION_DATETIME,
+    first_onscene_datetime = FIRST_ON_SCENE_DATETIME, inc_close_datetime = INCIDENT_CLOSE_DATETIME, 
                    
-                   disp_resp_sec_qy = DISPATCH_RESPONSE_SECONDS_QY, disp_resp_sec_indc = VALID_DISPATCH_RSPNS_TIME_INDC,
-                   inc_resp_sec_qy = INCIDENT_RESPONSE_SECONDS_QY, inc_resp_sec_indc = VALID_INCIDENT_RSPNS_TIME_INDC,
+    disp_resp_sec_qy = DISPATCH_RESPONSE_SECONDS_QY, disp_resp_sec_indc = VALID_DISPATCH_RSPNS_TIME_INDC,
+    inc_resp_sec_qy = INCIDENT_RESPONSE_SECONDS_QY, inc_resp_sec_indc = VALID_INCIDENT_RSPNS_TIME_INDC,
                    
-                   inc_travel_sec_qy = INCIDENT_TRAVEL_TM_SECONDS_QY, 
+    inc_travel_sec_qy = INCIDENT_TRAVEL_TM_SECONDS_QY, 
                    
-                   engines_assigned = ENGINES_ASSIGNED_QUANTITY,
-                   ladders_assigned = LADDERS_ASSIGNED_QUANTITY, others_units_assigned = OTHER_UNITS_ASSIGNED_QUANTITY)
+    engines_assigned = ENGINES_ASSIGNED_QUANTITY,
+    ladders_assigned = LADDERS_ASSIGNED_QUANTITY, others_units_assigned = OTHER_UNITS_ASSIGNED_QUANTITY)
 ```
 
 
-As we can see from the summary there are many `NA` values, and many predictors that are as characters and not factors. In this step we will convert the characters predictors as factors merging the values that appear less in the dataset, so we do no have many values that have low frequency in our dataset.
+As we can see there is lots of work to do, in fact we identify the following problem:
 
-In addition we will add he predictor for the `day_number`, a factorial predictor to indicate in the incident day is a week day or not `dat_type` and a factorial predictor `time_of_day` that indicates the range of time whenever the incident happens, so `Night` (if the hour is between 0 and 6), `Morning`  (if the hour is between 6 and 12), `Afternoon` (if the hour is between 12 and 18), `Evening`  (if the hour is between 18 and 24).
+1. Many `NA` values
+2. Lots of predictors are characters and not factor
+3. Many future factorial predictors have values that occurs very small time, this suggest that we can inglobe those in a bigger category
+4. The differences of datatime have huge variation, we can think on scaling the relative values
+5. Possible duplicate columns
 
-Since we are dealing with datetime we also check if the differences (`inc_resp_sec_qy`, `inc_travel_sec_qy` and `disp_resp_sec_qy`) are actually corrects, if not we replace them with the correct one.
+We start by converting the non factorial columns into factorial one. Then we perform accurate data exploration and cleaning in each macro columns set.
 
-Finally we decided to add an additional time difference the `emergency_min_qy` which represents the difference between the `inc_close_datetime` and the `first_onscene_datetime`.
-
-
-```{r factorial type}
+```{r}
 # set factorial
 fire_data$inc_borough <- as.factor(fire_data$inc_borough)
 fire_data$al_borough <- as.factor(fire_data$al_borough)
 fire_data$al_source_desc <- as.factor(fire_data$al_source_desc)
 fire_data$al_index_desc <- as.factor(fire_data$al_index_desc)
 fire_data$highest_al_level <- as.factor(fire_data$highest_al_level)
+fire_data$cong_dist <- as.factor(fire_data$cong_dist)
 
 fire_data$disp_resp_sec_indc <- as.factor(fire_data$disp_resp_sec_indc)
 levels(fire_data$disp_resp_sec_indc)<- c("N", "Y")
@@ -186,13 +211,26 @@ fire_data$inc_class_group <- as.factor(fire_data$inc_class_group)
 fire_data$inc_class <- as.factor(fire_data$inc_class)
 ```
 
-Moreover we note that the maximum level of the time differences is very high to be considered as seconds so we decided to scale the two indicators in minutes.
 
-```{r summary datetime predictors}
+
+## Process Temporal Data
+
+For the temporal data processing we employ a little of feature engineering. Indeed we decide to add the following predictors:
+
+1. `day_type`: a factorial predictor to indicate in the incident day is a week day or not
+2. `time_of_day`: a factorial predictor  that indicates the range of time whenever the incident happens, so `Night` (if the hour is between 0 and 6), `Morning`  (if the hour is between 6 and 12), `Afternoon` (if the hour is between 12 and 18), `Evening`  (if the hour is between 18 and 24).
+3. `emergency_min_qy`: which represents the difference between the `inc_close_datetime` and the `first_onscene_datetime`.
+4. `working_hour`: indicates if the incident between 8AM and 7PM, so the classic working hour.
+
+Moreover since we are dealing with datetime we also check if the differences (`inc_resp_sec_qy`, `inc_travel_sec_qy` and `disp_resp_sec_qy`) are actually corrects, if not we replace them with the correct one.
+
+Now we note that the maximum level of the time differences is very high to be considered as seconds so we decided to scale the two indicators in minutes.
+
+```{r}
 summary(fire_data %>% select(inc_resp_sec_qy, inc_travel_sec_qy, disp_resp_sec_qy))
 ```
 
-```{r scaling datetime to minutes}
+```{r}
 # scaling
 fire_data$inc_resp_sec_qy <- fire_data$inc_resp_sec_qy / 60
 fire_data$inc_travel_sec_qy <- fire_data$inc_travel_sec_qy / 60
@@ -204,9 +242,9 @@ fire_data <- fire_data %>% rename(inc_resp_min_qy = inc_resp_sec_qy, inc_travel_
 ```
 
 
-Here we create the `time_of_day` and `is_weekend`
+Perform the datetime feature engineering that we have discussed before.
 
-```{r adding custom datetime predictors}
+```{r}
 # Process datetime column
 fire_data$datetime <- mdy_hms(fire_data$datetime)
 fire_data$first_ass_datetime <- mdy_hms(fire_data$first_ass_datetime)
@@ -235,8 +273,8 @@ fire_data$emergency_min_qy <- as.numeric(difftime(fire_data$inc_close_datetime, 
 # creating day_type
 fire_data$day_type <- as.factor(ifelse(weekdays(fire_data$datetime) %in% c("sabato", "domenica"), "Weekend", "Weekday"))
 
-# creating ticket_time
-fire_data$ticket_time <- as.numeric(difftime(fire_data$inc_close_datetime, fire_data$datetime, units="mins"))
+# creating working_hour
+fire_data$working_hour <- as.factor(ifelse(hour(fire_data$datetime) >= 19 | hour(fire_data$datetime) < 8, FALSE, TRUE))
   
 # creating time_of_day
 fire_data$time_of_day <- cut(
@@ -246,15 +284,17 @@ fire_data$time_of_day <- cut(
     include.lowest = TRUE,
     right = TRUE
 )
-  
+
+# delete the datetime
 fire_data$datetime <- NULL
 ```
 
+Check the distribution of `time_of_day`
 
-```{r table time_of_day}
+```{r}
 table(fire_data$time_of_day)
 ```
-```{r geom_bar time_of_day}
+```{r}
 ggplot(data=fire_data %>% 
           group_by(time_of_day) %>%
           summarise(incident_number = n()), 
@@ -267,7 +307,13 @@ ggplot(data=fire_data %>%
 From this we can see that the higher number of fire incident is registered from 12 PM to 18 PM, whereas the lower number of fire incident happened from the 00 AM to 06 AM.
 
 
-```{r table day_type}
+
+Check the distribution of `day_type`
+
+```{r}
+table(fire_data$day_type)
+```
+```{r}
 day_type_table <- table(fire_data$day_type)
 day_type_table[1] <- day_type_table[1] / 5
 day_type_table[2] <- day_type_table[2] / 2
@@ -277,52 +323,74 @@ day_type_table
 And in proportion we can see that on average there is an higher number of fire incident on the week day respect to the week end days.
 
 
-Now regarding the `assigned untis` we decided to add a summary predictor that include the sum of all the three assigned units predictors.
+Check the distribution of `working_hour`
 
-```{r total_assigned_unit}
-fire_data$total_assigned_unit <- fire_data$engines_assigned + fire_data$ladders_assigned + fire_data$others_units_assigned
+```{r}
+table(fire_data$working_hour)
+```
+```{r}
+table(fire_data$working_hour) / dim(fire_data)[1]
 ```
 
+It seems like that there are slightly more incident during the working hour.
 
 
-Rename the factor levels for the `inc_borough` and  predictors
 
-```{r changing levels for inc_borough and al_borough}
+## Process Spatial Data
+
+Rename the factor levels for the `inc_borough` and `al_borough`.
+
+```{r}
 fire_data <- fire_data %>% mutate(inc_borough = recode_factor(
-                  inc_borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan",
-                  "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"),
+      inc_borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan",
+      "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"),
                   
-                  al_borough = recode_factor(
-                  al_borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan",
-                  "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"))
+      al_borough = recode_factor(
+      al_borough, "BRONX" = "Bronx", "BROOKLYN" = "Brooklyn", "MANHATTAN" = "Manhattan",
+      "QUEENS" = "Queens", "RICHMOND / STATEN ISLAND" = "Staten Island"))
 ```
 
+Regarding the Spatial Data we decide to keep the borough and also the congressional district since are the two predictors that have the least number of categories. Further in the section of data visualization we have a look on an interactive map of some relevant information for both aspects. 
 
+
+## Merging Factors
 
 At this point we merge some possible value from factorial predictors to make the space of possible choice smaller.
 
-Here we merge the following factorial values of `highest_al_level`: `Second Alarm` and `Third Alarm` into `2nd-3rd Alarm`.
+### Highest Alarm Level
+
+Here we merge the following factorial values of `highest_al_level`: `All Hands Working`, `Second Alarm` and `Third Alarm` into `NonFirst Alarm`. But before doing so let's see the actual distribution of values.
+
+```{r}
+table(fire_data$highest_al_level)
+```
+As we can see the majority of the observations are of the type **First Alarm**, whereas the other observation reach 109 observation, thus we concatenate the less category values into a single one called **NonFirst Alarm**
 
 
-```{r merging factors for highest_al_level}
-# highest_al_level
+```{r}
 fire_data$highest_alarm_lev_new <- fire_data$highest_al_level
 levels(fire_data$highest_alarm_lev_new) <- list(
-  "All Hands Working" = "All Hands Working",
   "First Alarm" = "First Alarm", 
-  "2nd-3rd Alarm" = c("Second Alarm", "Third Alarm")
+  "NonFirst Alarm" = c("All Hands Working", "Second Alarm", "Third Alarm")
 )
 
-print(ctable(fire_data$highest_al_level, fire_data$highest_alarm_lev_new, prop = 'n', totals = FALSE, headings = FALSE), method = 'render')
+ctable(fire_data$highest_al_level, fire_data$highest_alarm_lev_new, prop = 'n', totals = FALSE, headings = FALSE)
 
 fire_data$highest_al_level <- fire_data$highest_alarm_lev_new
 fire_data$highest_alarm_lev_new <- NULL
 ```
 
-Here we merge the following factorial values of `al_index_desc`: `Second Alarm`, `Third Alarm`, `7-5 (All Hands Alarm)`, `10-76 & 10-77 Signal (Notification Hi-Rise Fire)` and `10-75 Signal (Request for all hands alarm)` into `Others`.
+### Alarm Index Description
 
-```{r merging factors for al_index_desc}
-# al_index_desc
+Here we merge the following factorial values of `al_index_desc`: `Second Alarm`, `Third Alarm`, `7-5 (All Hands Alarm)`, `10-76 & 10-77 Signal (Notification Hi-Rise Fire)` and `10-75 Signal (Request for all hands alarm)` into `Others`. But before doing so let's see the actual distribution of values.
+
+```{r}
+table(fire_data$al_index_desc)
+```
+
+As we can see the two major category are **DEFAULT RECORD** and **Initial Alarm**, whereas the rest of categories occur very few time respect the main two, thus we decide again to merge them.
+
+```{r}
 fire_data$alarm_level_idx_new <- fire_data$al_index_desc
 levels(fire_data$alarm_level_idx_new) <- list(
   "DEFAULT RECORD" = "DEFAULT RECORD",
@@ -332,15 +400,22 @@ levels(fire_data$alarm_level_idx_new) <- list(
                "10-75 Signal (Request for all hands alarm)")
 )
 
-print(ctable(fire_data$al_index_desc, fire_data$alarm_level_idx_new, prop = 'n', totals = FALSE, headings = FALSE), method = 'render')
+ctable(fire_data$al_index_desc, fire_data$alarm_level_idx_new, prop = 'n', totals = FALSE, headings = FALSE)
 
 fire_data$al_index_desc <- fire_data$alarm_level_idx_new
 fire_data$alarm_level_idx_new <- NULL
 ```
 
-Here we merge the following factorial values of `al_source_desc`: `911`, `911TEXT`, `VERBAL`, `BARS`, `ERS`, `ERS-NC` and `SOL` into `Others`.
+### Alarm Source Description
 
-```{r merging factors for al_source_desc}
+Here we merge the following factorial values of `al_source_desc`: `911`, `911TEXT`, `VERBAL`, `BARS`, `ERS`, `ERS-NC` and `SOL` into `Others`. But before doing so let's see the actual distribution of values.
+
+```{r}
+table(fire_data$al_source_desc)
+```
+We decide to maintain as original the highest four and merge the rest into a new category.
+
+```{r}
 fire_data$alarm_source_desc_new <- fire_data$al_source_desc
 levels(fire_data$alarm_source_desc_new) <- list(
   "PHONE" = "PHONE",
@@ -350,7 +425,7 @@ levels(fire_data$alarm_source_desc_new) <- list(
   "Others" = c("911", "911TEXT", "VERBAL", "BARS", "ERS", "ERS-NC", "SOL")
 )
 
-print(ctable(fire_data$al_source_desc, fire_data$alarm_source_desc_new, prop = 'n', totals = FALSE, headings = FALSE), method = 'render')
+ctable(fire_data$al_source_desc, fire_data$alarm_source_desc_new, prop = 'n', totals = FALSE, headings = FALSE)
 
 fire_data$al_source_desc <- fire_data$alarm_source_desc_new
 fire_data$alarm_source_desc_new <- NULL
@@ -358,7 +433,7 @@ fire_data$alarm_source_desc_new <- NULL
 
 View again the dataset summary to see the applied changes.
 
-```{r print updated datset}
+```{r}
 print(dfSummary(fire_data, 
                 plain.ascii  = FALSE, 
                 style        = "multiline", 
@@ -370,17 +445,16 @@ print(dfSummary(fire_data,
 
 
 
-
-
-
-## Dealing with invalid values
+## Dealing with Invalid Values
 The next step is to deal invalid values and delete some un-useful predictors.
 
+
+### Duplicate Columns
 
 First of all we saw the possibility that `al_borough` and `inc_borough` represent the same column, let's chek it.
 
 
-```{r identical al_borough - inc_borough}
+```{r}
 identical(fire_data$al_borough, fire_data$inc_borough)
 ```
 The column ``al_borough` and `inc_borough` have the same sequence of values, so we can delete one of the two.
@@ -390,24 +464,24 @@ fire_data <- fire_data %>% select(-c(al_borough))
 ```
 
 
+### Constant value for all observations
 
 Then we say that all observation in the dataset have the `disp_resp_min_indc` equal to *N*, let's check again and in affermative case then we can delete both columns.
 
-```{r sumamry disp_resp_min_indc}
+```{r}
 summary(fire_data$disp_resp_min_indc)
 ```
 
 
-All our observations have non valid `disp_resp_min_indc` so we could delete both the column indicator and the respective column quantity `disp_resp_min_qy`. However we note that also in the original dataset all the observation have the `disp_resp_min_indc` set to **N**, which is quite strange, and seems that is problem relative to the data acquisition, thus we decide to mantein this time difference.
+All our observations have non valid `disp_resp_min_indc` so we could delete both the column indicator and the respective column quantity `disp_resp_min_qy`. However we note that also in the original dataset all the observation have the `disp_resp_min_indc` set to **N**, which is quite strange, and seems that is problem relative to the data acquisition, thus for the moment we decide to keep this time difference.
 
-```{r remove disp_resp_min_indc}
-fire_data <- fire_data %>% select(-c(disp_resp_min_indc))
-```
 
+
+### Validity Column Check
 
 Now we do a quick check also on the other indicator variable `inc_resp_min_indc`
 
-```{r sumamry inc_resp_min_indc}
+```{r}
 summary(fire_data$inc_resp_min_indc)
 ```
 
@@ -415,7 +489,7 @@ But here we have some observations with valid `inc_resp_min_indc`, and we will c
 
 However before doing that let's see the distribution of `inc_resp_min_qy` around the borough.
 
-```{r ggplot inc_resp_min_qy}
+```{r}
 ggplot(data=fire_data %>% group_by(inc_borough, inc_resp_min_indc) %>% summarise(incident_number = n()), 
        aes(x=inc_borough, y=incident_number, fill=inc_resp_min_indc)) +
   geom_bar(stat="identity", position=position_dodge()) +
@@ -429,7 +503,7 @@ We can see that the number of fire incident is higher for the valid response tim
 
 And to the rateo of valid `inc_resp_min_indc` in each borough is:
 
-```{r ggplot rateo incident resp_indc}
+```{r}
 rateo_inc_resp_min_indc <- fire_data %>% 
   group_by(inc_borough, inc_resp_min_indc) %>% 
   summarise(incident_number = n()) %>% 
@@ -447,61 +521,91 @@ ggplot(rateo_inc_resp_min_indc, aes(fill=inc_resp_min_indc, y=ratio, x=inc_borou
 
 And we can see that Staten Island has the higher number of incidents with valid `inc_resp_min_indc` , whereas Manhattan has the lower number, but remember that the former has the lowest number of fire incident and the latter has the higher number of incident.
 
-Now we do an additional analysis to see if there is some find of relation between the `inc_resp_min_indc` and `total_assigned_unit`.
+Now we do an additional analysis to see if there is some find of relation between the `inc_resp_min_indc` and `total_assigned_unit` which is the sum of all the assigned units. 
 
-```{r geom_point tau resp_qy}
-ggplot(fire_data, aes(total_assigned_unit, inc_resp_min_qy)) + 
-  geom_point(aes(colour = inc_resp_min_indc))+
-   labs(title = "Total Assigned Units - Response Time In Minutes", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Valid Response\n Time in Minutes")
+```{r}
+
+fire_data$total_assigned_unit <- fire_data$engines_assigned + fire_data$ladders_assigned + fire_data$others_units_assigned
+
+
+ggplot(fire_data %>% drop_na(), aes(total_assigned_unit, inc_resp_min_qy)) + 
+  geom_point(aes(colour = inc_resp_min_indc), na.rm = TRUE)+
+  #scale_color_gradient(na.value = NA) + 
+  labs(title = "Total Assigned Units - Response Time In Minutes", x = "Total Assigned Units",
+        y = "Response Time In Minutes", colour = "Valid Response\n Time in Minutes")
 ```
 
 We note that the majority of fire incident that had been assigned a single units has a high response time and the relative measure is not valid. Whereas for an higher number of total units the response time decrease and becomes valids.
 
 
-```{r geom_point res_indc N tau resp_qy}
-ggplot(fire_data %>% filter(inc_resp_min_indc == "N")
+```{r}
+ggplot(fire_data %>% filter(inc_resp_min_indc == "N") %>% drop_na()
             , aes(total_assigned_unit, inc_resp_min_qy)) + 
-  geom_point(aes(colour = inc_class_group, shape = inc_class_group)) +
+  geom_point(aes(colour = inc_class_group)) +
   labs(title = "Total Assigned Units - Response Time In Minutes - Incidnet Class Group", x = "Total Assigned Units", y = "Response Time In Minutes", colour = "Incident Class Groups")
 ```
 
-Regarding the incident class group around all the incidents with invalid response time had been assigned a single units as we discussed before, but in addition we found that are from the **Medical Emergencies**, whereas almost all the other incidents are from the **NonMedical Emergencies**.
+A closer look to the distribution of invalid response time for each incident class group summarised by the count of incident.
+```{r}
+irt_i_class <- arrange(fire_data %>% filter(inc_resp_min_indc == "N") %>%
+  group_by(inc_class_group) %>% summarise(incident_number = n()), desc(incident_number))
+irt_i_class
+```
 
 
-```{r geom_bar tua_is_one}
+Now we add a indicator column that tell us if the total assigned units is one or not. This would be useful in order to see possible relations.
+```{r}
 # add an additional predictor
-fire_data$tua_is_one <- as.factor(ifelse(fire_data$total_assigned_unit == 1, "Y", "N"))
-  
-tua_is_one <- fire_data %>% 
+fire_data$tua_is_one <- as.factor(ifelse(fire_data$total_assigned_unit == 1, TRUE, FALSE))
+```
+
+See the relative incident count for each incident class.
+```{r}
+irt_i_class_su <- arrange(fire_data %>% filter(inc_resp_min_indc == "N",  tua_is_one == TRUE) %>%
+         group_by(inc_class_group) %>% summarise(incident_number = n()), desc(incident_number))
+irt_i_class_su
+```
+
+
+And we found that majority of all observation if not almost the entire dataset records are from the **Medical Emergencies** with only ```irt_i_class[1,2] - irt_i_class_su[1,2]``` incident that have been assigned more than a single unit. Whereas almost all the other incidents are from the **NonMedical Emergencies** which in this case the spread of incident that have been assigned more than a single unit is higher, so we have to take into account this higher amount of observations. Indeed we have ```irt_i_class[2,2] - irt_i_class_su[2,2]``` NonMedical Emergencies incidents that have invalid response time and have been assigned more than a single units.
+
+
+At this point we decide to view the presence or not of pattern of incident with invalid response time that belong to the **Medical Emergencies** class with a single units assigned, first by grouping by borough.
+```{r}
+tuaisone <- fire_data %>% 
         filter(inc_resp_min_indc == "N", inc_class_group == "Medical Emergencies") %>%
         group_by(inc_borough, tua_is_one) %>%
         summarise(incident_number = n())
+```
 
-ggplot(data=tua_is_one, 
+Plot the bat chart.
+
+```{r}
+ggplot(data=tuaisone, 
        aes(x=inc_borough, y=incident_number, fill=tua_is_one)) +
   geom_bar(stat="identity", position=position_dodge()) +
   geom_text(aes(label=incident_number), vjust=1.5, color="black",
             position = position_dodge(0.9), size=3.5) +
   scale_fill_brewer(palette="Set1") +
-  labs(title = "Total Assigned Units One or Not", x = "Borough", y = "Incident Count", fill = "Total Assigned\nUnits are One")
+  labs(title = "Total Assigned Units One or Not for Invaid Resp Min Time",
+       x = "Borough", y = "Incident Count", fill = "Total Assigned\nUnits are One")
 ```
+And we can see that Bronx, Brooklyn and Manhattan have more or less the same amount of incident with invalid response time in minutes, which have been assigned a single units.
 
-We have also added an additional factorial predictor `tua_is_one` to indicates if the total assigned units is equal to one or not.
+Now we continue this analysis fo the invalid response time by changing the focus on the type of incident class (the sub-category which is more precise) that had been assigned a single total units.
 
-
-Continuing we decide to analyse the type of Incident Class of the invalid incidents response time that had been assigned a single total units.
-
-```{r geom_bar tua_is_one ME inc_class, fig.height = 5, fig.width = 15}
+```{r, fig.height = 5, fig.width = 15}
 ggplot(data=fire_data %>% 
-        filter(inc_resp_min_indc == "N", inc_class_group == "Medical Emergencies", tua_is_one == "Y") %>%
+        filter(inc_resp_min_indc == "N", inc_class_group == "Medical Emergencies", tua_is_one == TRUE) %>%
         group_by(inc_class, inc_borough) %>%
         summarise(incident_number = n()), 
        aes(x=inc_borough, y=incident_number, fill=inc_class)) + 
       geom_bar(stat="identity", position=position_dodge()) +
-        geom_text(aes(label=incident_number), vjust=1.6, color="black",
+        geom_text(aes(label=incident_number), vjust=-0.5, color="black",
                   position = position_dodge(0.9), size=3) +
         scale_fill_brewer(palette="Set1") +
-        labs(title = "Borough - Incident Counts - Incident Class -- for Total Assigned Units equal to 1", x = "Borough", y = "Incident Counts", fill = "Incident Class Group")
+        labs(title = "Borough - Incident Counts - Incident Class -- for Total Assigned Units equal to 1 for Invalid Responde Time",
+             x = "Borough", y = "Incident Counts", fill = "Incident Class Group")
 ```
 
 
@@ -513,51 +617,67 @@ Thanks to the [10code](http://www.fdnewyork.com/10code.asp) site we found a desc
 
 2. **10-91 Medical Emergency PD** - Fire Unit Not Required - To be transmitted through borough dispatcher by the responding unit when the fire Unit is canceled enroute due to PD on scene, or PD downgrades the job to a segment that does not require a Fire Unit response. Note: This signal shall be used only for medical emergency incidents. PD we think that stands for *Police Department*.
 
+Thus we can trust this information since they make sense and consider only the observations that have `inc_resp_min_indc == "Y"`.
 
 
-Now we can look for the NonMedical Emergencies by first see the distribution of its incident class.
+Now we can look for the **NonMedical Emergencies** since are the second category for number of observation that by first see the distribution of its incident class.
 
+Here we print the top 5 class which respect the following conditions: `inc_resp_min_indc == "N", inc_class_group == "NonMedical Emergencies"`
 
-```{r dist non resp_indc for NME}
-print(fire_data %>% 
+```{r}
+print(head(arrange(fire_data %>% 
         filter(inc_resp_min_indc == "N", inc_class_group == "NonMedical Emergencies") %>%
         group_by(inc_class) %>%
-        summarise(incident_number = n()))
+        summarise(incident_number = n()), desc(incident_number))))
 ```
-```{r geom_bar borough N resp_indc for NME}
+
+And we found that the majority of non valid `inc_resp_min_indc` that are Non-Medical Emergency are from the incident class equal to **Assist Civilian - Non-Medical**.
+
+```{r}
 ggplot(data=fire_data %>% 
-          filter(inc_resp_min_indc == "N", inc_class_group == "NonMedical Emergencies", inc_class == "Assist Civilian - Non-Medical") %>%
+          filter(inc_resp_min_indc == "N", inc_class == "Assist Civilian - Non-Medical") %>%
           group_by(inc_borough) %>%
           summarise(incident_number = n()), 
         aes(x=inc_borough, y=incident_number)) + 
       geom_bar(stat="identity", position=position_dodge()) +
       geom_text(aes(label=incident_number), vjust=1.6, color="white", position = position_dodge(0.9), size=3.5) +
-      labs(title = "Incident Count - Borouh - Valid Response Time in Second", x = "Borough", y = "Incident Count")
+      labs(title = "Assist Civilian - Non-Medical / Invalid Response / More than 1 Units", x = "Borough", y = "Incident Count")
 ```
 
-And we found that the majority of non valid `inc_resp_min_indc` that are Non-Medical Emergency are from the incident class equal to Assist Civilian - Non-Medical.
+We can see that except Staten Island the amount of incident is pretty constant.
 
 
+So for a stake of sempicity we decided to trust the indicator of incident response time and thus considering only the observations that have `inc_resp_min_indc == "Y"`.
 
-For stake of consistency we will consider only the valid observations that have `inc_resp_min_indc == "Y"`.
-
-```{r remove N resp_indc}
+```{r}
 fire_data <- fire_data %>% filter(inc_resp_min_indc == "Y")
 dim(fire_data)
 ```
 
+### Does the Incident Classes are unique for each Incident Class Group?
 
-Now we want to know how many `inc_class` are summarized in each `inc_class_group`, to be sure that each `inc_class_group` is referred to a single `inc_class`.
+Now we want to know how many `inc_class` are summarized in each `inc_class_group` and if there are any intersection between any incident classes. We perform this analysis to be sure that each `inc_class_group` is referred to a single `inc_class`.
 
-```{r ctable for inc_class}
-print(ctable(fire_data$inc_class, fire_data$inc_class_group, totals = FALSE, headings = FALSE), method = 'render')
+
+```{r}
+unique_category <- fire_data%>% 
+  group_by(inc_class) %>%
+  summarise(unique_maincategory = n_distinct((inc_class_group)))
+
+conflict <- unique_category %>% filter(unique_maincategory > 1)
+
+if (dim(conflict)[1] == 0){
+  print("There are NO conflict between main and sub-category")
+} else {
+  print("There are conflict between main and sub-category")
+}
 ```
 
-As we can see from the upper table all the `inc_class_group` have a unique set of values.
+So we are sure that each sub category has a unique main-category incident.
 
 At this point to be more clear we display each main class with each respective sub-class.
 
-```{r count inc_class per inc_class_group}
+```{r}
 for (variable in levels(fire_data$inc_class_group)) {
   non_zero_table <- table(subset(fire_data, inc_class_group == variable)$inc_class)
   cat(variable, "\n")
@@ -567,51 +687,55 @@ for (variable in levels(fire_data$inc_class_group)) {
 ```
 
 
-## NA Patterns?
 
-At this point is essential to deal with NA values, trying to find the presence of possible relation with predictors.
-First things first let's recap the number of NA values for each columns that we have at the moment.
 
-```{r is.na}
+# Dealing With Missing Data
+
+At this point is essential to deal with NA values, trying to find the presence of possible relation with predictors. First things first let's recap the number of NA values for each columns that we have at the moment.
+
+```{r}
 colSums(is.na(fire_data))
 ```
 
-### Checking the location predictors
+## Geographical Columns
 
 Here we will check if there is a pattern on the absence of values in the following predictors: `zipcode`, `pol_prec`, `city_con_dist`, `commu_dist`, `commu_sc_dist` and `cong_dist`.
 
-```{r na_locations}
+```{r}
 na_locations <- fire_data %>%
   filter(is.na(zipcode) | is.na(pol_prec) | is.na(city_con_dist) | is.na(commu_dist) | is.na(commu_sc_dist) | is.na(cong_dist))
 ```
 
 
-```{r geom_bar na_locations, fig.height = 5, fig.width = 10}
+```{r, fig.height = 5, fig.width = 10}
 ggplot(data=na_locations %>% 
         group_by(inc_class_group, inc_borough) %>%
         summarise(incident_number = n()), 
        aes(x=inc_borough, y=incident_number, fill=inc_class_group)) + geom_bar(stat="identity", position=position_dodge()) +
-        geom_text(aes(label=incident_number), vjust=1.6, color="black",
+        geom_text(aes(label=incident_number), vjust=-0.5, color="black",
                   position = position_dodge(0.9), size=3.5) +
-        #scale_fill_brewer(palette="Paired") +
-        labs(title = "NA location", x = "Borough", y = "Incident Count", fill = "Incident Class Group")
+        scale_fill_brewer(palette="Set1") +
+        labs(title = "NA Locations Columns", x = "Borough", y = "Incident Count", fill = "Incident Class Group")
 ```
 
 
-By the Bar Chart we note that the majority of observations that have at least one of the location predictors to NA are of the incident class group NonMedical Emergency, Non Medical MFAs and Medical Emergencies
+By the Bar Chart we note that the majority of observations that have at least one of the location predictors to NA are of the incident class group **NonMedical Emergency**, **Medical Emergencies** and **Non Medical MFAs**. 
 
-```{r rateo na_locations per borough}
+Here we verify if the proportion of NA is equally distributed around each borough.
+```{r}
 table(na_locations$inc_borough) / table(fire_data$inc_borough)
 ```
+And we found that Brooklyn has a lower percentage of NA location observation respect the others that are constant between them.
 
-```{r rateo na_locations per inc_class_group}
+Thus we compute the same process but this time looking into the incident class group, like before we would like to have a constant distribution among all classes.
+```{r}
 table(na_locations$inc_class_group) / table(fire_data$inc_class_group)
 ```
 
-However by looking at the proportion with the original dataset around the 40% of the whole observations of type NonMedical MFAs have at least one of the location columns to NA. Let's investigate.
+However by looking at the proportion with the original dataset around the 40% of the whole observations of type **NonMedical MFAs** have at least one of the location columns to NA. Let's investigate.
 
-
-```{r analysis NonMedical MFAs 1}
+In the original dataset this is the distribution of incident class for the NonMedical MFA incident class group.
+```{r}
 fd_nm_mfa_cl <- table(subset(fire_data, inc_class_group == "NonMedical MFAs")$inc_class)
 fd_nm_mfa_bro <- table(subset(fire_data, inc_class_group == "NonMedical MFAs")$inc_borough)
 
@@ -619,86 +743,112 @@ fd_nm_mfa_cl <- fd_nm_mfa_cl[fd_nm_mfa_cl != 0]
 fd_nm_mfa_cl
 ```
 
-In the original dataset this is the distribution of inc_class for the NonMedical MFA.
-
-```{r analysis NonMedical MFAs 2}
+And this is the distribution  of incident class for the NonMedical MFA incident class group, but this time w.r.t. the subset of incidents that have at least one locaton column to NA.
+```{r}
 na_nm_mfa_cl <- table(subset(na_locations, inc_class_group == "NonMedical MFAs")$inc_class)
 na_nm_mfa_bro <- table(subset(na_locations, inc_class_group == "NonMedical MFAs")$inc_borough)
 
 na_nm_mfa_cl <- na_nm_mfa_cl[names(fd_nm_mfa_cl)]
 na_nm_mfa_cl
 ```
+And we can clearly see that the observations of category **Non-Medical MFA - ERS** are the main.
 
 
-
-```{r rateo for NonMedical MFAs 1}
+```{r}
 na_nm_mfa_cl / fd_nm_mfa_cl
 ```
-So the 97% of all the Non-Medical MFA - ERS observations in the entire dataset have one of the location attribute equal to NA
+And more interestingly the **97% of all the Non-Medical MFA - ERS** observations in the entire dataset have one of the location attribute equal to NA.
 
-```{r rateo for NonMedical MFAs 2}
+```{r}
 na_nm_mfa_bro / fd_nm_mfa_bro
 ```
-And from here we can see that about the 78% of the observations that are NonMedical - MFAs that have at least one district column attribute to NA are from the RICHMOND / STATEN ISLAND.
-Also BRONX has about half of the NonMedical - MFAs observations that have at least one district column to NA.
-
-**NonMedical MFA** stands for **Non Medical - Medical First Aid**, unfortunately we are not able to find the meaning of **ERS**.
+And from here we can see that about the 78% of the observations that are NonMedical - MFAs that have at least one district column attribute to NA are from the RICHMOND / STATEN ISLAND. Also BRONX has about half of the NonMedical - MFAs observations that have at least one district column to NA.
 
 
-
-### Checking the assigned units predictors
-
-```{r check is.na assigned units}
-print(fire_data %>%
-  filter(is.na(engines_assigned) | is.na(ladders_assigned) | is.na(others_units_assigned)) %>%
-  group_by(inc_borough, inc_class)) %>%
-  summarise(incident_count = n())
+```{r}
+ggplot(data=na_locations %>%
+         filter(inc_class == "Non-Medical MFA - ERS") %>%
+         group_by(inc_borough) %>%
+         summarise(incident_count = n()), 
+      aes(x=inc_borough, y=incident_count)) + 
+      geom_bar(stat="identity", position=position_dodge()) +
+      geom_text(aes(label=incident_count), vjust=1.6, color="white", position = position_dodge(0.9), size=3.5) +
+      labs(title = "Non-Medical MFA - ERS", x = "Borough", y = "Incident Count")
 ```
 
-We can easily remove this observations.
+Finally we have that we have a lower number of **Non-Medical MFA - ERS** for Queens and Staten Istand.
 
-### Checking the first_act_datetime predictors
+So concluding **NonMedical MFA** stands for **Non Medical - Medical First Aid**, unfortunately we are not able to find the meaning of **ERS**, even if we think that could be possible be connected with something regarding the respiratory system like ERS: Emergency Respiratory System. And thus we think that these observations have NA location column by the same reason of the previously discussed **10-91 Medical Emergency**. However these are all suppositions, maybe by contacting the NYC Firefighters Department by mail should make things much clear.
 
-```{r is.na first_act_datetime}
+Again for stake of semplicity we have assumed that the observations that have at least one NA locations are randomly spreaded among the dataset.
+
+
+## Assigned Units Column
+
+```{r}
+print(fire_data %>%
+  filter(is.na(engines_assigned) | is.na(ladders_assigned) | is.na(others_units_assigned)))
+  
+```
+
+We can easily remove this observations, since it not appear any pattern and are only 4.
+
+## First Act Datetime
+
+Now we look into First Act Datetime and see if there is any pattern with the other columns.
+
+```{r}
 na_first_act_datetime <- fire_data %>% filter(is.na(first_act_datetime))
 ```
 
-```{r print is.na first_act_datetime}
-print(na_first_act_datetime %>% group_by(inc_class, inc_borough) %>% summarise(incident_count = n()))
+```{r}
+print(arrange(na_first_act_datetime %>% group_by(inc_class, inc_borough) %>% summarise(incident_count = n()), desc(incident_count)))
 ```
 
 
-```{r geom_bar is.na first_act_datetime}
+```{r}
 ggplot(data=na_first_act_datetime %>% 
         group_by(inc_class_group, inc_borough) %>%
-        summarise(incident_number = n()), 
-       aes(x=inc_borough, y=incident_number, fill=inc_class_group)) + geom_bar(stat="identity", position=position_dodge()) +
-labs(title = "NA First Act Date", x = "Borough", y = "Incident Count", fill = "Incident Class Group")
-
+        summarise(incident_count = n()), 
+    aes(x=inc_borough, y=incident_count, fill=inc_class_group)) +
+    geom_bar(stat="identity", position=position_dodge()) +
+    geom_text(aes(label=incident_count), vjust=1.6, color="white", position = position_dodge(0.9), size=3.5) +
+    labs(title = "NA First Act Date", x = "Borough", y = "Incident Count", fill = "Incident Class Group")
 ```
 
 Seems to be random and thus there is no pattern that motivate the presence of NA values in `first_act_datetime`.
 
 
+## Performing na.omit
+
 **At this point we can omit the NA values.**
 
-```{r remove na from fire_data}
+```{r}
 fire_data_new <- na.omit(fire_data)
 ```
 
 
-**And the un-usefull predictors**
+**And the un-usefull predictors** including `disp_resp_min_indc` and `inc_travel_min_qy` by since these two information are contained in `inc_resp_min_qy.` 
 
-```{r remove predecitors}
+```{r}
 fire_data_new <- fire_data_new %>% select(-c(zipcode, pol_prec, city_con_dist, commu_dist, al_location,
-                                             commu_sc_dist, cong_dist, first_ass_datetime, first_act_datetime,
-                                             first_onscene_datetime, inc_close_datetime, inc_resp_min_indc, 
+                                             commu_sc_dist, first_ass_datetime, first_act_datetime,
+                                             first_onscene_datetime, inc_close_datetime, inc_resp_min_indc,
+                                             disp_resp_min_indc, inc_travel_min_qy, disp_resp_min_qy, 
                                              id, al_number, inc_class))
 ```
 
+We decide to remove also the incident class since it contains too much category values which are summarised in the incident class group.
 
-```{r print ceaned datset}
-print(dfSummary(fire_data, 
+Save the cleaned dataframe for the next part of the analysis.
+
+```{r}
+write.csv(fire_data_new, "datasets/fire_data_clean.csv", row.names=FALSE)
+```
+
+
+```{r}
+print(dfSummary(fire_data_new, 
                 plain.ascii  = FALSE, 
                 style        = "multiline", 
                 headings     = FALSE,
@@ -709,108 +859,351 @@ print(dfSummary(fire_data,
 
 
 
-## Additional Data Visaulization
+# Data Visaulisation
 
-In this section we will have a look on additional data visualisation in order to better understand how the predictors behaves.
+In this section we will have a look on additional data visualisation in order to better understand how the predictors behaves. We divide this section in multiple subsection each focus on a relative subset of columns
 
-
+See the final columns that we have:
 ```{r}
-summary(fire_data_new)
+names(fire_data_new)
 ```
 
 
-### Y value: inc_resp_min_qy
+We divide the data visualisation in the following subsections:
 
+1. **Location Information**
+2. **Alarm Information**
+4. **Assigned Units Information**
+3. **Time Information**
+5. **Day Information**
+
+In each section analysis we will use both response: `inc_resp_min_qy` adn `emergency_time_qy`.
+
+
+## Location Information
+
+Here we study the `inc_borough` and `cong_dist` columns for both responses.
+
+### Incident Borough
+```{r}
+ggplot(fire_data_new,
+       aes(x = inc_borough, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Borough - Incident Minutes Response Time - Incident Class",
+       x = "Borough", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Here we can see that the response time is pretty the same around all borough for each incident class, indeed there is a slightly fast response respect to the other class for the **Structural Fires** as expected. The the highest number of outliers are from the **Medical** and **NonMedical Emergencies**.
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = inc_borough, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Borough - Emergency Minutes Time - Incident Class",
+       x = "Borough", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+Like before the **Structural Fires** require lots of time but only in some drastic cases identified by the outliers since on average they require even less time respect other categories. 
+
+### Congressional District
+
+```{r}
+bp1 <- ggplot(fire_data_new,
+       aes(x = cong_dist, y = inc_resp_min_qy)) +
+  geom_boxplot() +
+  labs(title = "Cong District - EmergencyMin Time",
+       x = "Cong District", y = "Emergency Min Time")
+
+bp2 <- ggplot(fire_data_new,
+       aes(x = cong_dist, y = emergency_min_qy)) +
+  geom_boxplot() +
+  labs(title = "Cong District - Emergency Min Time",
+       x = "Cong District", y = "Emergency Minutes Time")
+
+grid.arrange(bp1, bp2, ncol = 2)
+```
+
+Here we can't see any particular relevent information since on average we have the same distribution of time for all congressional district.
+
+## Alarm Information
+
+Here we study the `al_source_desc`, `al_index_desc` and `highest_al_level` columns for both responses.
+
+### Alarm Source Description
 ```{r}
 ggplot(fire_data_new,
        aes(x = al_source_desc, y = inc_resp_min_qy, color = inc_class_group)) +
   geom_boxplot() +
-  labs(title = "Alarm Source Description - Incident Minutes Response Time - Incident Class Borough",
-       x = "Alarm Source Description", y = "Incident Minutes Response Time", color = "Incident Class\nBorough")
+  labs(title = "Alarm Source Description - Incident Minutes Response Time - Incident Class",
+       x = "Alarm Source Description", y = "Incident Minutes Response Time", color = "Incident Class")
 ```
-Here we can see that for the EMS-911 alarm source only Medical Emergencis, Medical MFAs and NonMedical Emergencies were arrived. Moreover NonMedical Emergencies comes most from phone, whereas Medical Emergencies from EMS.
-
-
-```{r}
-ggplot(fire_data_new,
-       aes(x = day_type, y = inc_resp_min_qy, color = inc_class_group)) +
-  geom_boxplot() +
-  labs(title = "Day Type - Incident Minutes Response Time - Incident Class Group",
-       x = "Day Type", y = "Incident Minutes Response Time", color = "Incident Class\nGroup")
-```
-
-In this boxplot we approximately can't see any pattern for both day type and borough, whoever there are many outliers for medical and non medical emergencies since are the two predominant incident class.
-
-```{r}
-ggplot(fire_data_new,
-       aes(x = time_of_day, y = inc_resp_min_qy, color = inc_class_group)) +
-  geom_boxplot() +
-  labs(title = "Day Range Time - Incident Minutes Response Time - Incident Class Group",
-       x = "Day Range Time", y = "Incident Minutes Response Time", color = "Incident Class\nGroup")
-```
-
-Simillarly as the previous described boxpolt here there we can't see any particular relevant pattern.
-
-```{r}
-ggplot(fire_data_new, aes(x = total_assigned_unit, y = inc_resp_min_qy, group = inc_class_group)) +
-  geom_point(aes(color = inc_class_group)) +
-  labs(title = "Total Assagned Units - Incident Minutes Response Time - Incident Class Group",
-       x = "Total Assagned Units", y = "Incident Minutes Response Time", color = "Incident Class\nGroup")
-```
-
-Whereas here as described in a previous similar chart, the total assigned units and the incident response time in minutes appear to be inversely proportional, with the contradistinction of structural fires that have many assigned units and low response time and Non Medical Emergencies that have low assigned units and high response time.
-
-### Y value: emergency_min_qy
-
-Now we analyse the same box plot of before but now with a different response for the Y axis the emergency time in minutes.
+With this boxplot we can understand that there are many outliers for emergencies called via phone, in particular NonMedical Emergencies. Also in both EMS and EMS-911 there are many outliers for the Medical Emergencies. As expected then for emergencies called via EMS-911 we do not find both fires eergencies and non medical mfas.
 
 ```{r}
 ggplot(fire_data_new,
        aes(x = al_source_desc, y = emergency_min_qy, color = inc_class_group)) +
   geom_boxplot() +
-  labs(title = "Alarm Source Description - Emergency Minutes Time - Incident Borough",
-       x = "Alarm Source Description", y = "Emergency Minutes Time", color = "Incident Borough")
+  labs(title = "Alarm Source Description - Emergency Minutes Time - Incident Class",
+       x = "Alarm Source Description", y = "Emergency Minutes Time", color = "Incident Class")
+```
+Now the first thing that we see is the high amount of outliers for the emergencies called via phone that are structural fires, indeed on average the emergency time is higher for that alarm source category. An other interesting fact is for CLASS-3 the NonMedical MFAs have a big inter-quantile range, sice we have few information for that particular class.
+
+### Alarm Index Description
+```{r}
+ggplot(fire_data_new,
+       aes(x = al_index_desc, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Alarm Index Description - Incident Minutes Response Time - Incident Class",
+       x = "Alarm Index Description", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Again we can see many outliers for the two major class, and for the Initial alarm we do not have any Medical and NonMedical MFAs emergencies. For the Outlier class like in the previous cans the inter-quantile range for the NonStructural Fires is big since in the merged category we do no have many observations.
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = al_index_desc, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Alarm Index Description - Emergency Minutes Time - Incident Class",
+       x = "Alarm Index Description", y = "Emergency Minutes Time", color = "Incident Class")
+```
+Interestingly here we can see that around all the emergency with index level DEFAULT RECORD have very thin inter-quantile range with also low outliers, respect to the Initial Alarm and Others category level.
+
+### Highest Alarm Level
+```{r}
+ggplot(fire_data_new,
+       aes(x = highest_al_level, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Highest Alarm Level - Incident Minutes Response Time - Incident Class",
+       x = "Highest Alarm Level", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Pretty all emergency of First Alarm have the same amount of response time with particular outliers for Medical and Non Medical Emergencies and also for NonMedical MFAs, whereas for NonFirst Alarm since we have few observation there for the non Structural Fire we have a big range of interquantile.
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = highest_al_level, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Highest Alarm Level - Emergency Minutes Time - Incident Class",
+       x = "Highest Alarm Level", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+Similarly to the previous subsection here all the emergency with highest alarm level to First Alarm have a low emergency time in particular Medical and NonMedical MFAs, again we have a significative number of outliers for this class. Regarding NonFirst Level we have few observations and that is why the emergency time is so different respect to the other class. Even if the longest time taken emergencies are a structural fire with highest alarm level NonFirst Alarm.
+
+
+
+## Assigned Units Information
+
+Here we study the `engines_assigned`, `ladders_assigned`, `others_units_assigned`, `total_assigned_unit` and `tua_is_one` columns for both responses.
+
+### Eginees Assigned
+```{r}
+#fire_data_new$engines_assigned <- as.numeric(fire_data_new$engines_assigned)
+ggplot(fire_data_new,
+       aes(x = engines_assigned, y = inc_resp_min_qy, color = inc_class_group)) +
+  #geom_boxplot()
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Engines Assigned - Incident Minutes Response Time - Incident Class",
+       x = "Engines Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
 ```
 
 
-Here the first effect that we see is the high number of Structural Fires that are outside the fourth band for the phone alarm source description.
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = engines_assigned, y = emergency_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Engines Assigned - Emergency Minutes Time - Incident Class",
+       x = "Engines Assigned", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+
+
+### Ladders Assigned
+```{r}
+ggplot(fire_data_new,
+       aes(x = ladders_assigned, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Ladders Assigned - Incident Minutes Response Time - Incident Class",
+       x = "Ladders Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = ladders_assigned, y = emergency_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group))  +
+  labs(title = "Ladders Assigned - Emergency Minutes Time - Incident Class",
+       x = "Ladders Assigned", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+### Others Units Assigned
+```{r}
+ggplot(fire_data_new,
+       aes(x = others_units_assigned, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Others Units Assigned - Incident Minutes Response Time - Incident Class",
+       x = "Others Units Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = others_units_assigned, y = emergency_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Others Units Assigned - Emergency Minutes Time - Incident Class",
+       x = "Others Units Assigned", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+### Total Units Assigned
+```{r}
+ggplot(fire_data_new,
+       aes(x = total_assigned_unit, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Total Units Assigned - Incident Minutes Response Time - Incident Class",
+       x = "Total Units Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Whereas here as described in a previous similar chart, the total assigned units and the incident response time in minutes appear to be inversely proportional, with the contradistinction of structural fires that have many assigned units and low response time and Non Medical Emergencies that have low assigned units and high response time.
+
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = total_assigned_unit, y = emergency_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Total Units Assigned - Emergency Minutes Time - Incident Class",
+       x = "Total Units Assigned", y = "Emergency Minutes Time", color = "Incident Class")
+```
+Here we can see that the Structural Fire incident have lots of variance directly and seems be a directly proportional relationship between the total assigned units and the Emergency Time. For the NonMedical Emergencies they are clustered and then for the Medical Emergencies we can see that they have been mostly assigend a single units.
+
+
+
+
+
+### Total Assigned Units is One
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = tua_is_one, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Total Assigned Unit is 1 - Incident Minutes Response Time - Incident Class",
+       x = "Total Assigned Unit is 1", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = tua_is_one, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Total Assigned Unit is 1 - Emergency Minutes Time - Incident Class",
+       x = "Total Assigned Unit is 1", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+
+
+## Time Information
+
+Here we study the relation of `inc_resp_min_qy` against `emergency_time_qy`.
+
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = inc_resp_min_qy, y = emergency_min_qy, color = inc_class_group)) +
+  geom_point(aes(color = inc_class_group)) +
+  labs(title = "Incident Minutes Response Time - Emergency Minutes Time - Incident Class",
+       x = "Incident Minutes Response Time", y = "Emergency Minutes Time", color = "Incident Class")
+```
+
+Here we can see many different distribution with the relation that the less the response time is the higher is the time taken to close the emergency.
+
+Since we can't understand much by this chart we decide to plot the density of each incident class group for both response.
+
+```{r}
+ggplot(fire_data_new, aes(x = inc_resp_min_qy, fill = inc_class_group)) +
+  geom_density(alpha = 0.3) + xlim(0, 20) +
+  labs(title = " Density Incident Minutes Response Time - Incident Class",
+       x = "Incident Minutes Response Time", y = "Density", fill = "Incident Class")
+```
+In this density chart we can see that the distribution of **Incident Response Time** for each incident class seems to behave like a **Log-Norm distribution**.
+We limit the x axis in order to be able to understand the distribution otherwise it will result in a very thin curve so not much easy to understand.
+
+```{r}
+ggplot(fire_data_new, aes(x = emergency_min_qy, fill = inc_class_group)) +
+  geom_density(alpha = 0.5) + xlim(0, 75) +
+  scale_fill_brewer(palette="Set1") +
+  labs(title = "Density Emergency Response Time - Incident Class",
+       x = "Emergency Response Time", y = "Density", fill = "Incident Class")
+```
+Similarly as before also here the distribution of **Incident Time** for each incident class seems to behave like a **Log-Norm distribution**.
+Again lke before we limit the x axis in order to be able to understand the distribution otherwise it will result in a very thin curve so not much easy to understand.
+
+
+
+## Day Information
+Here we study the `day_type`, `working_hour` and `time_of_day` columns for both responses.
+
+### Day Type
+```{r}
+ggplot(fire_data_new,
+       aes(x = day_type, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Day Type - Incident Minutes Response Time - Incident Class",
+       x = "Day Type", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Speaking about the day we can't see any relevant pattern here except that it appears in the weekend we have a lower number of outliers for all the incident class.
 
 ```{r}
 ggplot(fire_data_new,
        aes(x = day_type, y = emergency_min_qy, color = inc_class_group)) +
   geom_boxplot() +
-  labs(title = "Day Type - Emergency Minutes Time - Incident Class Group",
-       x = "Day Type", y = "Emergency Minutes Time", color = "Incident Class\nGroup")
+  labs(title = "Day Type - Emergency Minutes Time - Incident Class",
+       x = "Day Type", y = "Emergency Minutes Time", color = "Incident Class")
 ```
+Here there is any kind of patters that we can recondunct to the day type for the emergency time taken.
 
-Here instead we can't see any pattern regarding day type, whereas we can see that the most outliers are from Structurl Fires in both day types.
+### Working Hour
+```{r}
+ggplot(fire_data_new,
+       aes(x = working_hour, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Working Hour - Incident Minutes Response Time - Incident Class",
+       x = "Working Hour", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Even for the working hourwe can't see any pattern regarding the incident response time.
+
+```{r}
+ggplot(fire_data_new,
+       aes(x = working_hour, y = emergency_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Working Hour - Emergency Minutes Time - Incident Class",
+       x = "Working Hour", y = "Incident Minutes Time", color = "Incident Class")
+```
+And even for the emergency time taken.
+
+### Day Time
+```{r}
+ggplot(fire_data_new,
+       aes(x = time_of_day, y = inc_resp_min_qy, color = inc_class_group)) +
+  geom_boxplot() +
+  labs(title = "Day Time - Incident Minutes Response Time - Incident Class",
+       x = "Day Time", y = "Incident Minutes Response Time", color = "Incident Class")
+```
+Here we can't see any relevant pattern except the fact that we have an higher number of outliers in the afternoonfor the Medical, NonMedical Emergencies and Structural Fires.
 
 ```{r}
 ggplot(fire_data_new,
        aes(x = time_of_day, y = emergency_min_qy, color = inc_class_group)) +
   geom_boxplot() +
-  labs(title = "Day Range Time - Emergency Minutes Time - Incident Class Group",
-       x = "Day Range Time", y = "Emergency Minutes Time", color = "Incident Class\nGroup")
+  labs(title = "Day Time - Emergency Minutes Time - Incident Class",
+       x = "Day Time", y = "Incident Minutes Time", color = "Incident Class")
 ```
+Here interestingly we can see that the longest time taken emergencies are Structural Fires and they happend in the Nighe and on the Morning. Except this we do not have any pattern.
 
-Again similar as the previous boxplots we can't see any relevant patterns, except that the heavy outliers belonging to Structural Fires.
-
-```{r}
-ggplot(fire_data_new, aes(x=total_assigned_unit, y=emergency_min_qy, group=inc_class_group)) +
-  geom_point(aes(color=inc_class_group)) +
-  labs(title = "Total Assagned Units - Emergency Minutes Time - Incident Class Group",
-       x = "Total Assagned Units", y = "Emergency Minutes Time", color = "Incident Class\nGroup")
-```
-
-Finally here we can see that the Structural Fire incident have lots of variance directly and seems be a directly proportional relationship between the total assigned units and the Emergency Time. For the NonMedical Emergencies they are clustered and then for the Medical Emergencies we can see that they have been mostly assigend a single units.
 
 
 
 ### Maps Visualization
 
-In this section we plot additional data visualization focus on the geographical visualization of the New York borough with relative predictors. In order to do so we load an additional datasets:
+In this section we plot additional data visualization focus on the geographical visualization of the New York borough and congressional distirct with relative predictors. In order to do so we load an additional datasets:
 
-The **fdny-firehouse-listing.csv** is a dataset that includes the geographical informations of every firefighter stations in the NYC, including again *latitude* and *longitude*.
+1. The **fdny-firehouse-listing.csv** is a dataset that includes the geographical informations of every firefighter stations in the NYC, including again *latitude* and *longitude*.
+2. **NYC_BoroughBoundaries.geojson** is the spatial dataframe that includes the geometry of each boroughs
+3. **Congressiona_Districts.geojson** is the spatial dataframe that includes the geometry of each congressional districts
 
 
 ```{r read fdny-firehouse-listing.csv}
@@ -850,8 +1243,11 @@ stations_borough <- firefighter_stations %>%
 
 Now we want to get a summary of the incident count, the number of station and the incident per station of each borough in order to have a general view of the New York City situation.
 
+This step is done twice we have to group both for **borough** and then for **congressional district**.
+
 ```{r incident_per_station}
 count_inc_brough <- fire_data_for_ffs %>% group_by(borough) %>% summarise(incident_count = n())
+count_inc_cdist <- fire_data_for_ffs %>% group_by(cong_dist) %>% summarise(incident_count = n())
 
 stations_borough$incident_per_station <- round(count_inc_brough$incident_count / stations_borough$number_of_stations, digits = 3)
 
@@ -866,65 +1262,108 @@ firefighter_stations_sdf <- st_as_sf(firefighter_stations, coords = c("Longitude
 head(firefighter_stations_sdf)
 ```
 
-#### Downloand of the geojson file 
+#### Downloand of the geojson files
 
-At this point we download the `.geojson` file that contain all the geometry of each borough in order to have a cool maps visualization of NYC.
+At this point we download the `.geojson` files that contain all the geometry of each borough in order to have a cool maps visualization of NYC.
 
-```{r geojson_newyork}
-geojson_newyork <- geojson_read("datasets/NYC_BoroughBoundaries.geojson",  what = "sp")
-geojson_newyork <- setNames(geojson_newyork, c("borough_code", "borough", "shape_area", "shape_leng"))
-geojson_newyork$borough <- as.factor(geojson_newyork$borough)
-geojson_newyork$borough_code <- NULL
-head(geojson_newyork)
+Here we load the **NYC_BoroughBoundaries.geojson**.
+
+```{r geoj_nyc_borough}
+geoj_nyc_borough <- geojson_read("datasets/NYC_BoroughBoundaries.geojson",  what = "sp")
+geoj_nyc_borough <- setNames(geoj_nyc_borough, c("borough_code", "borough", "shape_area", "shape_leng"))
+geoj_nyc_borough$borough <- as.factor(geoj_nyc_borough$borough)
+geoj_nyc_borough$borough_code <- NULL
+head(geoj_nyc_borough)
 ```
 
-And now we merge `geojson_newyork` with `count_inc_brough` maintaining the **Spartial Data Frame** type.
-
-```{r merging geojson_newyork and count_inc_brough}
-geojson_newyork@data = data.frame(geojson_newyork@data, count_inc_brough[match(geojson_newyork@data$borough, count_inc_brough$borough),])
-geojson_newyork@data$borough.1 <- NULL
+And here the **Congressiona_Districts.geojson**.
+```{r geoj_nyc_cdist}
+geoj_nyc_cdist <- geojson_read("datasets/Congressional_Districts.geojson",  what = "sp")
+geoj_nyc_cdist$cong_dist <- as.factor(geoj_nyc_cdist$cong_dist)
+head(geoj_nyc_cdist)
 ```
 
-And finally we can plot the interactive map using the `mapview` function.
+And now we merge `geoj_nyc_borough` with `count_inc_brough` maintaining the **Spartial Data Frame** type.
 
-```{r mapview}
-mapview(list(firefighter_stations_sdf, geojson_newyork),
+```{r merging geoj_nyc_borough and count_inc_brough}
+geoj_nyc_borough@data = data.frame(geoj_nyc_borough@data, count_inc_brough[match(geoj_nyc_borough@data$borough, count_inc_brough$borough),])
+geoj_nyc_borough@data$borough.1 <- NULL # remove the added column
+```
+
+Here we are making the same step as before but this this with the `geoj_nyc_cdist` merging via `cong_dist`, again maintaining the **Spartial Data Frame** type.
+
+```{r merging geoj_nyc_cdist and count_inc_cdist}
+geoj_nyc_cdist@data = data.frame(geoj_nyc_cdist@data, count_inc_cdist[match(geoj_nyc_cdist@data$cong_dist, count_inc_cdist$cong_dist),])
+geoj_nyc_cdist@data$cong_dist.1 <- NULL # remove the added column
+```
+
+And finally we can plot the interactive maps using the `mapview` function.
+
+First for Incident Borough:
+
+```{r mapview borough}
+mapview(list(firefighter_stations_sdf, geoj_nyc_borough),
         zcol = list(NULL, "incident_count"),
         legend = list(FALSE, TRUE),
-        homebutton = list(FALSE, TRUE), layer.name = list(NULL, "indicents_number"), alpha.regions = 0.5, aplha = 1)
+        homebutton = list(FALSE, TRUE),
+        layer.name = list(NULL, "Incidents Count"),
+        popup = list(popupTable(firefighter_stations_sdf), popupTable(geoj_nyc_borough)),
+        alpha.regions = 0.5, aplha = 1)
 ```
+
+And then for Congressional District:
+
+```{r mapview cong_dist}
+mapview(geoj_nyc_cdist,
+        zcol = "incident_count",
+        legend = TRUE,
+        popup = popupTable(geoj_nyc_cdist),
+        homebutton = TRUE,
+        layer.name = "Incidents Count",
+        alpha.regions = 0.5, aplha = 1)
+```
+
+
+
+
 
 
 # Let's build some models (or at least try)
 
-As suggested by the professor we have opted to solve a regression problem with response first `inc_resp_min_qy`, and then the `emergency_min_qy`. Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+As suggested by the professor we have opted to linear regression using as response:
 
-For both analysis we transform the relative response in log scale in order to simulate the behaviour of the Exponential and Gamma GLMs.
+1- `inc_resp_min_qy` 
+2- `emergency_min_qy`
 
-So first things first let's check if there are some observations that have at least one of the time differences equal to zero.
+Initially we were thinking to solve a multi-classification / binary classification problem for the `inc_class_group`, however we were considering all the time difference predictors that are a future information w.r.t. the `inc_class_group` in prediction time, so it doesn't make much sense to use them, and it is possible also that they will result in super predictors. That's way we decided to grab the professor suggestion.
+
+For both analysis we transform the relative response in **log scale** in order to simulate the behaviour of the Log-Norm distribution. Of course we have to verify that the linearty assumption are meet.
+
+So first things first let's check if there are some observations that have at least one of the two possible responses equal to zero, if so we have to remove then in order to apply next the log transformation.
 
 ```{r}
-summary(fire_data_new %>% select(disp_resp_min_qy, inc_travel_min_qy, inc_resp_min_qy, emergency_min_qy, ticket_time))
+summary(fire_data_new %>% select(inc_resp_min_qy, emergency_min_qy))
 ```
 
+Remove them.
 ```{r}
-fire_data_new <- fire_data_new %>% filter(inc_travel_min_qy != 0, emergency_min_qy != 0)
+fire_data_new <- fire_data_new %>% filter(emergency_min_qy != 0)
 ```
 
 
-Then we have to check the presence of correlation in the continuous predictor and if so deleting one or more of them.
+Then we have to check the presence of correlation in the continuous predictors and if so deleting one or more of them. Thus here we are doing an initial chec of **multicollinearity** problems only in the numerical variable before once we create our for the future models. In order to do so compute the square of the correlation matrix.
 
 ```{r}
 round(cor(fire_data_new %>% dplyr::select(where(is.numeric)))^2, digits=3)
 ```
-As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, that's we we decided to remove from the dataframe. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis. We have done this step to remove **singluarities** for the future models.
+As we can see `total_assigned_unit` is heavily correlated to the other counts since it is the sum of those, thus deceide to remove the sum of units. Continuing we note also that lot's of time difference are correlated to each other, whoever it is obvious since some of them include other smaller difference, these measures will be managed soon once we deal with the two type of analysis.
 
 ```{r}
 fire_data_new <- fire_data_new %>% select(-c(total_assigned_unit))
 ```
 
 
-Next before creating any model have to split the cleaned dataset into *train* and *test*, with 0.8% of the whole dataset for the train set and the remaining 20% for the test set.
+Next before creating any model have to split the cleaned dataset into *train* and *test*, with 80% of the whole dataset for the train set and the remaining 20% for the test set.
 
 ```{r}
 set.seed(43)
@@ -941,11 +1380,11 @@ dim(fire_data.train)
 dim(fire_data.test)
 ```
 
-## Linear Regression???
+# Linear Regression???
 
-### Use inc_resp_min_qy as response
+## Use inc_resp_min_qy as response
 
-In this section we use `inc_resp_min_qy` as response, so we have to remove all the time difference predictors that are computed with one of the two datetime that comes after the incident datetime, so all the other except for our actual response.
+In this section we use `inc_resp_min_qy` as response, thus we omit `emergency_time_qy` since it is a future difference of time that is not know at prediction time. 
 
 
 ```{r}
@@ -954,8 +1393,8 @@ resp_min_fd.train <- fire_data.train
 resp_min_fd.test <- fire_data.test
 
 # remove the future time differences
-resp_min_fd.train <- resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
-resp_min_fd.test <- resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time))
+resp_min_fd.train <- resp_min_fd.train %>% select(-c(emergency_min_qy))
+resp_min_fd.test <- resp_min_fd.test %>% select(-c(emergency_min_qy))
 ```
 
 Let's build our first Linear Regression Model
@@ -964,6 +1403,37 @@ Let's build our first Linear Regression Model
 lm_irm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
 summary(lm_irm_full)
 ```
+By the summary we can see that the model $R^2$ tell us that we are able explain around the $12.83\%$ of the total variability of the data and also the Adjusted R-squared which penalise the complexity of our model tell us the same story.
+
+Let's interpret the complete model by first specifying what categorical variable are contained in the intercept:
+
+- inc_borough = Bronx
+- cong_dist = 3
+- al_source_desc = PHONE
+- al_index_desc = DEFAULT RECORD
+- highest_al_level = First Alarm
+- inc_class_group = Medical Emergencies
+- day_type = Weekday
+- working_hour = FALSE
+- time_of_day = Night
+- tua_is_one = FALSE
+
+So the intercept explain the mean response time in minutes for an incident with the cited values of categorical predictors and the value of the three following numeric predictors:
+
+- engines_assiged = 0
+- ladders_assigned = 0
+- others_units_assigned = 0
+
+Speaking a little bit about the **p-value** we can mention that:
+
+- **inc_boroughBrooklyn, inc_boroughManhattan, inc_boroughStaten Island** have all significant p-value, this indicate the difference on mean response time for an incident having the intercept predictor values and an incident with the same predictor except the borough being one of the respective three. All of three have a decreasing effect on the mean response time.
+- Regarding the **cong_dist** only **cong_dist5** and **cong_dist12** have a significant p-value, both with a decreasing effect on the mean response time of an incident with the intercept characteristics except the *cong_dist* being on of the specified two.
+- Interestingly **al_source_descOthers** indicate a big decrease on the mean response time respect the reference level.
+- **engines_assigned** and **others_units_assigned** have a decreasing effect on the mean response time with the latter being quite reasonable significant and the former being heavely significant. On the other hand **ladders_assigned** is significant but differently respect the other two units measure its effect is increase the mean response time of the reference level.
+- **day_typeWeekend** is significant with an decrease effect on the mean response time for the reference level. The same discussion can be made for **working_hourTRUE**.
+- **time_of_dayEvening** and **tua_is_oneY** are significant with the first having a decreasing and the second having a increasing effect on the reference level.
+
+At this point we can analyse the **regression diagnostic plots**:
 
 ```{r}
 par(mfrow=c(2,2))
@@ -971,10 +1441,13 @@ plot(lm_irm_full)
 ```
 
 Now we have to see if the linearity assumption are met and thus if we can use a linear regression model for our analysis.
+
 1. **Residuals vs Fitted plot**: here we can see if our residuals have a linear pattern and this is confermed by the straight horizontal red line. Even if,we have an higher amount of spreaded observations on the top of the red line.
 2. **Q-Q Residuals plot**: in this plot called also quantile - quantile residual plot and tells us if the residuals are normally distributed or not. If they follows the 45 degrees dotted line we can say so otherwise as in our case we can't say that are normally distributed, as we will see in much detail later.
-3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessments of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, something more or less in this case.
-4. **Residuals VS Leverage plot**: helps us to identify the influential points with the Cook's distance, so points that have influence on the regression line. And if some point feed in the area delimited by the dotted lines those points will be assigned as influential. In our case we do not have any observations that satisfy what we have just saied.
+3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessments of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, in our case we are not particullary happy.
+4. **Residuals VS Leverage plot**: helps us to identify the influential points with the Cook's distance, so points that have influence on the regression line. And if some point feed in the area delimited by the dotted lines those points will be assigned as influential. In our case we do not have any observations that satisfy what we have just saied
+
+Moreover we better analyse the distribution of the residuals by using the `qqPlot` from the `car` package. This will produce a better plot of the distribution of the residuals with relative confidence interval ban in blue.
 
 ```{r}
 qqPlot(residuals(lm_irm_full))
@@ -982,11 +1455,14 @@ qqPlot(residuals(lm_irm_full))
 
 Much clearly the qqPlot tells that the data the residuals are not normally distributed indeed are heavily right skewed. Thus we can't trust the p-values and the estimation of the coefficients. 
 
+
+Here instead we have a look of all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
 ```{r}
 residualPlots(lm_irm_full)
 ```
 
-Here instead we have a look of all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
+Both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
+
 
 Let's have a look of the possible power transformation of the response.
 
@@ -998,271 +1474,252 @@ powerTransform(lm_irm_full)
 The function **powerTransform** suggests to take the log-transformation of the response, we take the log transformation because the estimated value of **lambda** is close to zero.
 
 
+But before updating the full model scaling the response by logarithm let's check if we have **multicollinearity**. To do so we use the `vif` function by the `car` package.
+
 ```{r}
-lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ .)
+vif(lm_irm_full)
+```
+We decide to use as rule of thumb $GIF < 10$ no **strong multicollinearity** problem. Multicollinearity means that one predictor variable can be predicted linearly from the others. This problem could cause the coefficient to be unstable and unreliable, moreover the standard errors of the regression coefficients tend to increase in the presence of multicollinearity. And higher standard errors mean wider confidence intervals and reduced precision in estimating the true values of the coefficients.
+
+In our case we decide to remove the following predictors:
+
+- cong_dist
+- inc_class_group
+- highest_al_level 
+
+
+Let's update our model scaling the response to the logarithm scale and remove the previously listed predictors.
+
+```{r}
+lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ . - cong_dist - inc_class_group - highest_al_level)
+vif(lm_irm_full_upd)
+```
+No multicollinearity problem, now we can analyse the summary of the updated model.
+
+```{r}
 summary(lm_irm_full_upd)
 ```
 
 Now remember that we can't compere the $R^2$ with the previous model since in the last one the response is on a different scale.
 
-Let's see how the residuals behaves in this new model.
+Regarding the reference level here the discussion is the same as the previous one, except the fact that the reference level is on logarithm scale so the predictors have a increasing or decreasing effect on the mean logarithm response time.
+
+
+Now we analyse the **regression diagnostic plots** for the log response model.
 
 ```{r}
 par(mfrow=c(2,2))
 plot(lm_irm_full_upd)
 ```
 
-Like the previous model we can say the residuals follow a linear pattern much better that the previous model. Again we do not have any influential point. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+Like the previous model we can say the residuals follow a linear pattern much better that the previous model, even if the residual are not randomly spreaded but are groupe on the right. Again we do not have any influential point. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
 
 1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
 2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
 
-The qqPlot is buch clear here, where we can see also the residuals vs predictors and residuals vs fitted values.
+Let's  much clearly analyse the new qqPlot.
+
+```{r}
+qqPlot(residuals(lm_irm_full_upd))
+```
+So in other word this “S” shaped qqPlot with a linear portion in the middle suggests the data have more extreme values (or outliers) than the normal distribution in the tails. This indicate the following statements:
+
+1- The coefficient estimates are unbiased and consistent.
+2- The Standard Error could be wrong.
+3- The p-value are usually much lower respect to the real p-value. This means that a p-value in the order of 0.0001 could not be really significant.
+
+
+Now we can see the residuals vs predictors and residuals vs fitted values.
 
 ```{r}
 residualPlots(lm_irm_full_upd)
-qqPlot(residuals(lm_irm_full_upd))
 ```
+Again both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
 
 Thus again the linear assumptions are not meet, mainly by the non normal distribution of the residuals.
 
+
+
 At this point we have decided in any case to investigate this behaviour trying to fix the non normality of the residuals by modifying the scale of some predictors and adding interaction term between them.
 
-We start by modifying the previous model by adding the interaction term and scaling the numbe of assigned units by the logarithm scale after having increased by a single units.
+So the edits we will perform are the following one:
+
+- Removing the non significant predictors
+- Adding the interaction terms
+- Scaling the number of assigned units by the logarithm scale after having increased by a single units
+
 
 ```{r}
-lm_irm_full_upd_2 <- update(lm_irm_full_upd, log(inc_resp_min_qy) ~ . + engines_assigned : inc_class_group + time_of_day : day_type + log(ladders_assigned + 1) + log(engines_assigned + 1) + log(others_units_assigned + 1) + log(engines_assigned + 1) : inc_class_group)
+lm_irm_full_upd_2 <- update(lm_irm_full_upd, . ~ . - others_units_assigned - engines_assigned + log(engines_assigned + 1) - ladders_assigned + log(ladders_assigned + 1) - others_units_assigned + log(others_units_assigned + 1) + log(engines_assigned + 1))
 summary(lm_irm_full_upd_2)
 ```
 
+Now we can compare this $R^2 = 0.1576$ with the one of the previous model which is $R^2 = 0.1539$. So with the newest model we have explained $0.37\%$ much variability respect to the initial model. Pretty poor result I would say, so the effort of changing the scale of the assigned units doesn't paied off. We have already tried to insert some kind of interaction terms, however the model $R^2$ results in a lower value respect to the initial one thus we prefer the cleaned model after the multicollinearity check.
+
+Anyway we contine thus analysis by interpreting the updated model. The intercept level is composed by the following predictors:
+
+Let's interpret the complete model by first specifying what categorical variable are contained in the intercept:
+
+- inc_borough = Broonx
+- al_source_desc = PHONE
+- al_index_desc = DEFAULT RECORD
+- day_type = Weekday
+- working_hour = FALSE
+- time_of_day = Night
+- tua_is_one = FALSE
+
+So the intercept explain the mean  logarithm response time for an incident with the cited values of categorical predictors and the value of the three following numeric predictors:
+
+- log(engines_assigned + 1) = 0
+- log(others_units_assigned + 1) = 0
+- log(ladders_assigned + 1) = 0
+
+Since we add an interaction term, let's discuss who it behaves in our model:
+
+Next the **scaled logarithm assigned units** indicates the average decrease in terms of logarithm response time per logarithm assigned units + 1 for the intercept level.
+
+
+Now we analyse the **regression diagnostic plots**.
 ```{r}
 par(mfrow=c(2,2))
 plot(lm_irm_full_upd_2)
 ```
 
+1. **Residuals vs Fitted plot**: here we can see that the residuals have a linear pattern.
+2. **Q-Q Residuals plot**: again we do not have the situation of normal distribution of the residuals, as we will have a closer look soon.
+3. **Scaled-Location / Spread-Location plot**: homoscedasticity quite reached even if we have a light curvature
+4. **Residuals VS Leverage plot**: we can't see any influential pont
+
+
+```{r}
+qqPlot(residuals(lm_irm_full_upd_2))
+```
+Unfortunately the situation is the same as the previous described one.
 
 ```{r}
 residualPlots(lm_irm_full_upd_2)
-influenceIndexPlot(lm_irm_full_upd_2, vars = "Cook")
 ```
+Again both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
 
-Again we it seems that nothing have changed regarding the qqPlot, whereas the distribution of fitted - residuals values is a little bit spreaded randomly. However here we have not constant variance on the residuals and we have also an influential point the 9504.
+In conclusion unfortunately we can't apply linear regression on the log scale of `inc_resp_min_qy`, the main problem is the distribution of the residuals with is not normal thus we can't really trust the p-values end the estimation of the model coefficients.
 
-Let's see the influential point and check how it behaves.
-
-```{r}
-resp_min_fd.train[9504,]
-```
-
-Now we investigate on why the 10036 observation is an influential point. Let's see how is the behaviour of the logarithm scale of the assigned units for the Structural Fire and see if we can find the observation 9504.
- 
-```{r}
-infl_point <- subset(resp_min_fd.train, inc_class_group == "Medical MFAs")
-
-# Create a boxplot for Engines Assigned
-p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
-  geom_boxplot() +
-  ggtitle("Engines Assigned") +
-  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "engines_assigned"] + 1)), col = "red", pch = 16) +
-  labs(title = "Engines Units Count",
-       x = "Engines Units", y = "Count")
-
-# Create a boxplot for Ladders Assigned
-p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
-  geom_boxplot() +
-  ggtitle("Ladders Assigned") +
-  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "ladders_assigned"] + 1)), col = "red", pch = 16) +
-  labs(title = "Ladders Units Count",
-       x = "Ladders Units", y = "Count")
-
-# Create a boxplot for Other Units Assigned
-p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
-  geom_boxplot() +
-  ggtitle("Other Units Assigned") +
-  geom_point(aes(x = 0, y = log(resp_min_fd.train[9504, "others_units_assigned"] + 1)), col = "red", pch = 16) +
-  labs(title = "Other Units Count",
-       x = "Other Units", y = "Count")
-
-# Display the plots in a 1x3 grid
-grid.arrange(p1, p2, p3, ncol = 3)
-```
-
-
-And we see that the observed incident is far away from the distribution of others assigned units for the Medical MFAs incident, so we decide to remove this observation during the refitting of the last model.
-
-```{r}
-lm_irm_full_upd_3 <- update(lm_irm_full_upd_2, subset = -9504)
-summary(lm_irm_full_upd_3)
-```
-
-```{r}
-par(mfrow=c(2,2))
-plot(lm_irm_full_upd_3)
-```
-
-Again we are on the same situation of before.
-
-```{r}
-residualPlots(lm_irm_full_upd_3)
-qqPlot(residuals(lm_irm_full_upd_3))
-influenceIndexPlot(lm_irm_full_upd_3, vars = "Cook")
-summary(fitted(lm_irm_full_upd_3))
-```
-
-We try again to remove the influential point even if it is not outside the cook's band.
-
-```{r}
-resp_min_fd.train[16373,]
-```
-
-```{r}
-infl_point <- subset(resp_min_fd.train, inc_class_group == "Structural Fires")
-
-# Create a boxplot for Engines Assigned
-p1 <- ggplot(infl_point, aes(y = log(engines_assigned + 1))) +
-  geom_boxplot() +
-  ggtitle("Engines Assigned") +
-  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "engines_assigned"] + 1)), col = "red", pch = 16) +
-  labs(title = "Engines Units Count",
-       x = "Engines Units", y = "Count")
-
-# Create a boxplot for Ladders Assigned
-p2 <-ggplot(infl_point, aes(y = log(ladders_assigned + 1))) +
-  geom_boxplot() +
-  ggtitle("Ladders Assigned") +
-  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "ladders_assigned"] + 1)), col = "red", pch = 16) +
-  labs(title = "Ladders Units Count",
-       x = "Ladders Units", y = "Count")
-
-# Create a boxplot for Other Units Assigned
-p3 <- ggplot(infl_point, aes(y = log(others_units_assigned + 1))) +
-  geom_boxplot() +
-  ggtitle("Other Units Assigned") +
-  geom_point(aes(x = 0, y = log(resp_min_fd.train[16373, "others_units_assigned"] + 1)), col = "red", pch = 16) +
-  labs(title = "Other Units Count",
-       x = "Other Units", y = "Count")
-
-# Display the plots in a 1x3 grid
-grid.arrange(p1, p2, p3, ncol = 3)
-```
-
-
-```{r}
-lm_irm_full_upd_4 <- update(lm_irm_full_upd_2, subset = -c(16373, 9504))
-summary(lm_irm_full_upd_4)
-```
-
-```{r}
-par(mfrow=c(2,2))
-plot(lm_irm_full_upd_4)
-```
-
-
-```{r}
-residualPlots(lm_irm_full_upd_4)
-qqPlot(residuals(lm_irm_full_upd_4))
-influenceIndexPlot(lm_irm_full_upd_4, vars = "Cook")
-summary(fitted(lm_irm_full_upd_4))
-```
-
-
-However we are still in a situation of non normal distribution of the residuals thus we can't apply a linear regression model of the log scale of `inc_resp_min_qy`.
 Let's see if in the other type response the assumption of linearity are meet or not (spoiler...they are not verified again :( ).
 
 
-### Use emergency_min_qy as response
-
-Again we make a copy of the train and test. This time we decided to merge the assigned units in a single predictor deleting the single counts in order to see if we have an improvement on the qqPlots for the next models.
-
-
-```{r}
-# make a copy of the train and test
-emerg_min_fd.train <- fire_data.train
-emerg_min_fd.test <- fire_data.test
-
-emerg_min_fd.train$total_assigned_units = emerg_min_fd.train$engines_assigned + emerg_min_fd.train$ladders_assigned + emerg_min_fd.train$others_units_assigned
-emerg_min_fd.test$total_assigned_units = emerg_min_fd.test$engines_assigned + emerg_min_fd.test$ladders_assigned + emerg_min_fd.test$others_units_assigned
-
-# remove the future time differences and units counts
-emerg_min_fd.train <- emerg_min_fd.train %>% 
-  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
-emerg_min_fd.test <- emerg_min_fd.test %>% 
-  select(-c(inc_resp_min_qy, ticket_time, engines_assigned, ladders_assigned, others_units_assigned))
-```
-
+## Use emergency_min_qy as response
 
 Fit a linear regression model with all the predictors.
 
 ```{r}
-lm_em_full <- lm(emergency_min_qy ~ ., data = emerg_min_fd.train)
+lm_em_full <- lm(emergency_min_qy ~ ., data = fire_data.train)
 summary(lm_em_full)
 ```
+The first thing that come to our eyes is the $R^2$ value which in this case is $0.3359$ thus we explain more or less 1/3 of the variability of the data. Also the Adjusted R-squared has a similar value which is $0.3349$.  
 
+Now let's interpret the complete model by first specifying what categorical variable are contained in the intercept:
+
+- inc_borough = Bronx
+- cong_dist = 3
+- al_source_desc = PHONE
+- al_index_desc = DEFAULT RECORD
+- highest_al_level = First Alarm
+- inc_class_group = Medical Emergencies
+- day_type = Weekday
+- working_hour = FALSE
+- time_of_day = Night
+- tua_is_one = FALSE
+
+So the intercept explain the mean emergency time in minutes taken for an incident with the cited values of categorical predictors and the value of the three following numeric predictors:
+
+- engines_assiged = 0
+- ladders_assigned = 0
+- others_units_assigned = 0
+
+Speaking a little bit about the **p-value** we can mention some coefficients:
+
+- **inc_boroughBrooklyn, inc_boroughManhattan, inc_boroughStaten Island** have all significant p-value, this indicate the difference on mean emergency time taken in minutes for an incident having the intercept predictor values and an incident with the same predictor except the borough being one of the respective three. All of three have a decreasing effect on the mean emergency time, respectively of $-5.72702$ minutes, $-3.05730$ minutes and $-4.41859$ minutes.
+- Regarding the **cong_dist** only **cong_dist13** has a statistically high significant p-value, it has a increase effect on the mean emergency time in minutes of an incident with the intercept characteristics except the *cong_dist*.
+- For **al_source_desc** we have all the factorial predictor highly statistically significant except **al_source_descEMS** which has a low level of p-value
+- Interestingly we can see that **al_index_descInitial**, **al_index_descOthers** have an high increasing decreasing effect on the mean emergency time taken of an incident with the intercept characteristics except the *al_index_desc* being on of the specified two. Respectively of $16.02968$ and $64.18114$ minutes.
+- **highest_al_levelNonFirst** has an heavy increasing effect ($60.26687$ minutes) on the mean emergency time taken respect the reference level.
+
+Now we analyse the **regression diagnostic plots** for the log response model.
 
 ```{r}
 par(mfrow=c(2,2))
 plot(lm_em_full)
 ```
 
-Here the fitted values vs the residual are behaving in a liner relation but they are not randomly spread since we can view two / three clusters, the same thing discussion can be made for the Scale Location plot in which we can see that there is no constant variance. But again we are in a situation in which the residuals are not normally distributed as we can more clearly see in the following plot.
+1. **Residuals vs Fitted plot**: Here the fitted values vs the residual are behaving in a liner relation but they are not randomly spread since again we can view three or even more clusters.
+2. **Q-Q Residuals plot**: again we do not have the situation of normal distribution of the residuals, as we will have a closer look soon.
+3. **Scaled-Location / Spread-Location plot**: homoscedasticity is not verified since we do not have constant variance of the residuals, in fact we can see a big cluster on the left and small groups of observation spreaded in the rest of the plot.
+4. **Residuals VS Leverage plot**: we can't see any influential points.
+
 
 ```{r}
 qqPlot(residuals(lm_em_full))
 ```
+Here we can see two heavy tail with the right much more evident respect to the left indicating that the largest observations are less than we would expect from a normal distribution.
 
-Let's have a look of the possible power transformation of the response.
+Now we have a look of the possible power transformation of the response.
 
 ```{r}
 powerTransform(lm_em_full)
 ```
 
-We will try transform the response both using the logarithm scale and the power of 0.14. in order to see in we have an improvement on the distribution of the residuals.
+We will try transform the response both using the **logarithm scale** and the **power of 0.14**. in order to see in we have an improvement on the distribution of the residuals.
 
+But before updating the full model scaling the response by logarithm let's check if we have **multicollinearity**. To do so we use the `vif` function by the `car` package.
 
-First by using the suggested power trasformation of 0.14.
+```{r}
+vif(lm_em_full)
+``` 
+Of course we have a similar problem as the previous analysis. We decide to remove the same predictors so `cong_dist`, and `highest_al_level`.
+
+Now we can update the initial model by using the suggested power transformation of 0.14 and remove the previously mentioned predictors.
 
 
 ```{r}
-lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ .)
+lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ . - cong_dist - highest_al_level - inc_class_group)
 summary(lm_em_full_014)
 ```
 
-
+Let's see the residuals.
 ```{r}
 par(mfrow=c(2,2))
 plot(lm_em_full_014)
 ```
+1. **Residuals vs Fitted plot**: same situation of the previous models, here we can clearly see three distinct clusters.
+2. **Q-Q Residuals plot**: is the best situation the we ever see in this analysis, later we have a closer and much detailed look.
+3. **Scaled-Location / Spread-Location plot**: homoscedasticity is not verified since we do not have constant variance of the residuals, in fact we can see a big cluster on the left and small groups of observation spreaded in the rest of the plot.
+4. **Residuals VS Leverage plot**: we can't see any influential points.
 
 ```{r}
 qqPlot(residuals(lm_em_full_014))
 ```
 
-In this case the two tails appear to be more homogeneous, however the situation is the same so we do not have normal distribution of residuals as we can see by the qqPlot.
+In this case the two tails appear to be more homogeneous and better respect the previous models and even the previous analysis, however the final conclusion is the same, we do not have normal distribution of residuals as we can see by the qqPlot.
 
-Trying the logarithm scale.
+Trying the **logarithm scale** of the response.
 
 ```{r}
-lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ .)
+lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ . - cong_dist - highest_al_level - inc_class_group)
 summary(lm_em_full_log)
 ```
+Remember again that we can't compare the $R^2$ between the former and the latter model since the response is not on the same scale.
 
+View the residuals.
 
 ```{r}
 par(mfrow=c(2,2))
 plot(lm_em_full_log)
 ```
 
-Again we note the presence of three clusters on the first and third plots, let's investigate a bit in order to gain some additional information.
+1. The **Residuals VS Fitted** seems pretty good since the red line follow reasonably well the 0 horizontal dotted line, indicating our residual have a linear relation with the fitted values, however they are not randomly spreaded since we can clearly see the presence of three clusters.
+2. The **Q-Q Plots** again tells us that we are not in a situation of normally distributed residuals since we have the two tail that goes outside the 95% confidence interval.
+3. In the **Scale - Location Plots** homoscedasticity is not particullary satisfied since we have two main clusters and we have a decreasing trend.
+4. In the **Residuals VS Leverage Plots** we can see that there are not any influential point that we have to process and investigate.
 
-```{r}
-ggplot(lm_em_full_log, aes(x = .fitted, y = .resid)) +
-  geom_point(aes(color = inc_class_group)) +
-  geom_hline(yintercept = 0) +
-  labs(title = "Residuals VS Fitted",
-       x = "Fitted Values", y = "Residuals", color = "Incident Class Group")
-```
-
-The right cluster is for the Structural Fires, the middle one contain both Medical and NonMedical Emergencies with some Strictural and NonStructural Fires, and the left one contains NonMedical Emergencies and a small number of Medical one and Medical and NonMedical MFAs.
 
 ```{r}
 qqPlot(residuals(lm_em_full_log))
@@ -1272,8 +1729,12 @@ Here the right tail is less far from the 95 confidence interval respect the prev
 
 In conclusion we end up in a situation where the linearity assumptions are not meet thus we can't use a regression model to perform prediction even with the logarithm transformation of the response. It is much likely that a powerful methods should be taken into account for this analysis with a deeper study of the relationship between predictors.
 
+Moreover we think also that a deeper consideration of the outliers should be taken into account since are those observations that bring with them many informations.
 
-## Cast the anaysis to a Calssification task
+
+
+
+# Cast the anaysis to a Calssification task
 
 As mention before we decided like the professor suggested to us, to cast our regression problem in a classification problem by dividing the range of possible time difference response into 2 for a binary classification or more than 2 for a multi-classification task.
 
@@ -1300,34 +1761,40 @@ th_eme <- summary(fire_data_new$emergency_min_qy)[4]
 ```
 
 
-### Use the range of inc_resp_min_qy as response
+## Use the range of inc_resp_min_qy as response
 
+
+First thing first we 
 ```{r}
 # make a copy of the train and test
 cl_resp_min_fd.train <- fire_data.train
 cl_resp_min_fd.test <- fire_data.test
 
-cl_resp_min_fd.train$fast_response <- cl_resp_min_fd.train$inc_resp_min_qy < th_irm
-cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_irm
+# set the factorial response via the early computed threshold
+cl_resp_min_fd.train$fast_response <- as.factor(cl_resp_min_fd.train$inc_resp_min_qy < th_irm)
+cl_resp_min_fd.test$fast_response <- as.factor(cl_resp_min_fd.test$inc_resp_min_qy < th_irm)
 
 # remove the future time differences
-cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
-cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
+cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(emergency_min_qy, inc_resp_min_qy))
+cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(emergency_min_qy, inc_resp_min_qy))
 ```
 
-Fit our full **GLM** using the family **binomial**.
+
+### Logistic Regression
+
+Fit our full **Logistic Regression** model.
 
 ```{r}
 res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = binomial)
 summary(res_glm.fit_full)
 ```
 
-We have an $AIC = 27793$, so in order to use this measure we have to comprare this model with an other one. 
+We have an $AIC = 29346$, so in order to use this measure we have to compare this model with an other one. 
 
-Update the previous model by adding some interaction terms.
+Update the previous model by adding an interaction terms and removing the non-significant predictors.
 
 ```{r}
-res_glm.fit_full_upd <- update(res_glm.fit_full, . ~ . + engines_assigned : al_source_desc + day_type : ladders_assigned, data = cl_resp_min_fd.train)
+res_glm.fit_full_upd <- update(res_glm.fit_full, . ~ . - ladders_assigned + al_source_desc : engines_assigned + al_source_desc : others_units_assigned + al_source_desc : ladders_assigned, data = cl_resp_min_fd.train)
 summary(res_glm.fit_full_upd)
 ```
 
@@ -1364,9 +1831,11 @@ coords(res_glm.roc, x = "best", ret = "all")
 ```
 Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(res_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
 ```{r}
-res_acc_glm <- 100*coords(res_glm.roc, x = "best", ret = "all")$accuracy
+res_acc_glm <- coords(res_glm.roc, x = "best", ret = "all")$accuracy
 res_acc_glm
 ```
+
+
 
 
 Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
@@ -1386,6 +1855,7 @@ y_test <- cl_resp_min_fd.test$fast_response
 
 
 
+
 ```{r}
 res_fit.ridge <- glmnet(x_train, y_train, familiy="binomial", alpha = 0)
 plot(res_fit.ridge, xvar = "lambda", label = TRUE)
@@ -1396,6 +1866,7 @@ plot(res_cv.ridge)
 
 
 Here we can see the plot of the coefficients.
+
 The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
 
 $$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
@@ -1512,23 +1983,23 @@ The printed output of **lda** includes:
 We make the prediction on the test set and analyse the result by the confusion matrix.
 ```{r}
 res_lda.preds <- predict(res_lda.fit, newdata = cl_resp_min_fd.test, type = "response")
-table(preds = res_lda.preds$class, true = y_test)
+table(preds = res_lda.preds$class, true = cl_resp_min_fd.test$fast_response)
 ```
 
 
 And finally computing the accuracy:
 ```{r}
-mean(res_lda.preds$class == y_test)
+mean(res_lda.preds$class == cl_resp_min_fd.test$fast_response)
 ```
 
 The ROC curve for linear discriminant analysis is
 ```{r}
-res_lda.roc <- roc(y_test ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+res_lda.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
 coords(res_lda.roc, x = "best", ret = "all")
 ```
 The best choice for the threshold of linear discriminant analysis yields an accuracy of:
 ```{r}
-res_acc_lda <- 100*coords(res_lda.roc, x = "best", ret = "all")$accuracy
+res_acc_lda <- coords(res_lda.roc, x = "best", ret = "all")$accuracy
 res_acc_lda
 ```
 
@@ -1538,7 +2009,7 @@ Continuing with the analysis we try **Naive Bayes** algorithm.
 
 ```{r}
 res_nb.fit <- naiveBayes(formula(res_glm.fit_full), data = cl_resp_min_fd.train)
-nb.fit
+res_nb.fit
 ```
 
 
@@ -1599,7 +2070,9 @@ for (i in 1:20) {
 
 plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
 ```
+
 The highest accuracy is obtained with k = ```{r} which.max(rates) ``` and with an accuracy of
+
 ```{r}
 res_acc_knn <- max(rates)
 ```
@@ -1613,133 +2086,3 @@ data.frame (
   test_Accuracy = c(res_acc_glm, res_acc_glm_ridge, res_acc_glm_lasso, res_acc_lda, res_acc_nb, res_acc_knn)
 )
 ```
-
-
-
-
-
-
-
-
-Multinomial Logistic Regression
-
-
-```{r}
-'resp_mn.train <- fire_data.train
-resp_mn.test <- fire_data.test
-
-summ_fd <- summary(fire_data_new$inc_resp_min_qy)
-
-resp_mn.train$fast_response <- cut(resp_mn.train$inc_resp_min_qy,
-              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
-              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
-resp_mn.test$fast_response <- cut(resp_mn.test$inc_resp_min_qy,
-              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
-              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
-
-# remove the future time differences
-resp_mn.train <- resp_mn.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))
-resp_mn.test <- resp_mn.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, inc_resp_min_qy))'
-```
-
-
-```{r}
-#multi.fit <- multinom(fast_response ~ . + , data = resp_mn.train, trace = FALSE)
-```
-
-```{r}
-'multi.preds <- predict(multi.fit, newdata = resp_mn.test)
-table(preds = multi.preds, true = resp_mn.test$fast_response)'
-```
-Multinomial logistic regression never predicts the second class. The accuracy of the multinomial logistic classifier is 
-```{r}
-'mean(multi.preds == resp_mn.test$fast_response)'
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### Use the range of emergency_min_qy as response
-
-```{r}
-# make a copy of the train and test
-cl_emerg_min_fd.train <- fire_data.train
-cl_emerg_min_fd.test <- fire_data.test
-
-cl_emerg_min_fd.train$fast_emergency <- cl_emerg_min_fd.train$emergency_min_qy < th_eme
-cl_emerg_min_fd.test$fast_emergency <- cl_emerg_min_fd.test$emergency_min_qy < th_eme
-
-# remove the future time differences and units counts
-cl_emerg_min_fd.train <- cl_emerg_min_fd.train %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
-cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy, ticket_time, inc_travel_min_qy))
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-'resp_mn.train <- fire_data.train
-resp_mn.test <- fire_data.test
-
-summ_fd <- summary(fire_data_new$emergency_min_qy)
-
-resp_mn.train$fast_response <- cut(resp_mn.train$emergency_min_qy,
-              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
-              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
-resp_mn.test$fast_response <- cut(resp_mn.test$emergency_min_qy,
-              breaks=c(0, summ_fd[2], summ_fd[4], summ_fd[6]),
-              labels=c("Fast Response", "Medium Response", "Low Response"), include.lowest = TRUE)
-
-# remove the future time differences
-resp_mn.train <- resp_mn.train %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, emergency_min_qy))
-resp_mn.test <- resp_mn.test %>% select(-c(disp_resp_min_qy, inc_travel_min_qy, emergency_min_qy, ticket_time, emergency_min_qy))'
-```
-
-
-```{r}
-#multi.fit <- multinom(fast_response ~ . , data = resp_mn.train, trace = FALSE)
-```
-
-```{r}
-'multi.preds <- predict(multi.fit, newdata = resp_mn.test)
-table(preds = multi.preds, true = resp_mn.test$fast_response)'
-```
-Multinomial logistic regression never predicts the second class. The accuracy of the multinomial logistic classifier is 
-```{r}
-#mean(multi.preds == resp_mn.test$fast_response)
-```
-
