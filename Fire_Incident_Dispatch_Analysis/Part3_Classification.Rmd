@@ -39,8 +39,8 @@ We will use the same predictors of the Regression Section so first `inc_resp_min
 
 First things first load the cleaned train and test datasets.
 ```{r, cache=TRUE}
-fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv")
-fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv")
+fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv", stringsAsFactors = TRUE)
+fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv", stringsAsFactors = TRUE)
 
 fire_data_clean <- rbind(fire_data_clean.train, fire_data_clean.test)
 

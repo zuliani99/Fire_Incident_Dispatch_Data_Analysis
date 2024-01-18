@@ -963,66 +963,8 @@ Similarly to the previous subsection here all the emergency with highest alarm l
 
 ## Assigned Units Information
 
-Here we study the `engines_assigned`, `ladders_assigned`, `others_units_assigned`, `total_assigned_unit` and `tua_is_one` columns for both responses.
+Here we study the `total_assigned_unit` and `tua_is_one` columns for both responses.
 
-### Eginees Assigned
-```{r}
-#fire_data_new$engines_assigned <- as.numeric(fire_data_new$engines_assigned)
-ggplot(fire_data_new,
-       aes(x = engines_assigned, y = inc_resp_min_qy, color = inc_class_group)) +
-  #geom_boxplot()
-  geom_point(aes(color = inc_class_group)) +
-  labs(title = "Engines Assigned - Incident Minutes Response Time - Incident Class",
-       x = "Engines Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
-```
-
-
-
-```{r}
-ggplot(fire_data_new,
-       aes(x = engines_assigned, y = emergency_min_qy, color = inc_class_group)) +
-  geom_point(aes(color = inc_class_group)) +
-  labs(title = "Engines Assigned - Emergency Minutes Time - Incident Class",
-       x = "Engines Assigned", y = "Emergency Minutes Time", color = "Incident Class")
-```
-
-
-
-### Ladders Assigned
-```{r}
-ggplot(fire_data_new,
-       aes(x = ladders_assigned, y = inc_resp_min_qy, color = inc_class_group)) +
-  geom_point(aes(color = inc_class_group)) +
-  labs(title = "Ladders Assigned - Incident Minutes Response Time - Incident Class",
-       x = "Ladders Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
-```
-
-
-```{r}
-ggplot(fire_data_new,
-       aes(x = ladders_assigned, y = emergency_min_qy, color = inc_class_group)) +
-  geom_point(aes(color = inc_class_group))  +
-  labs(title = "Ladders Assigned - Emergency Minutes Time - Incident Class",
-       x = "Ladders Assigned", y = "Emergency Minutes Time", color = "Incident Class")
-```
-
-### Others Units Assigned
-```{r}
-ggplot(fire_data_new,
-       aes(x = others_units_assigned, y = inc_resp_min_qy, color = inc_class_group)) +
-  geom_point(aes(color = inc_class_group)) +
-  labs(title = "Others Units Assigned - Incident Minutes Response Time - Incident Class",
-       x = "Others Units Assigned", y = "Incident Minutes Response Time", color = "Incident Class")
-```
-
-
-```{r}
-ggplot(fire_data_new,
-       aes(x = others_units_assigned, y = emergency_min_qy, color = inc_class_group)) +
-  geom_point(aes(color = inc_class_group)) +
-  labs(title = "Others Units Assigned - Emergency Minutes Time - Incident Class",
-       x = "Others Units Assigned", y = "Emergency Minutes Time", color = "Incident Class")
-```
 
 ### Total Units Assigned
 ```{r}
@@ -1057,7 +999,7 @@ ggplot(fire_data_new,
   labs(title = "Total Assigned Unit is 1 - Incident Minutes Response Time - Incident Class",
        x = "Total Assigned Unit is 1", y = "Incident Minutes Response Time", color = "Incident Class")
 ```
-
+Here we can see a quite difference respect to having a total assigned unit equal to one and not, indeed every incident class have a higher mean value for the incident which had been assigend a single units.
 
 ```{r}
 ggplot(fire_data_new,
@@ -1067,7 +1009,7 @@ ggplot(fire_data_new,
        x = "Total Assigned Unit is 1", y = "Emergency Minutes Time", color = "Incident Class")
 ```
 
-
+And in this case we can see that there is less variation on the emergency time response for the incident that had been assigned a single units, respect to the incident with more units assigned. And as expected the **Structural Fires** with more than one units are the type of incident with most outliers given their severity.
 
 ## Time Information
 
@@ -1156,7 +1098,7 @@ ggplot(fire_data_new,
   labs(title = "Day Time - Incident Minutes Response Time - Incident Class",
        x = "Day Time", y = "Incident Minutes Response Time", color = "Incident Class")
 ```
-Here we can't see any relevant pattern except the fact that we have an higher number of outliers in the afternoonfor the Medical, NonMedical Emergencies and Structural Fires.
+Here we can't see any relevant pattern except the fact that we have an higher number of outliers in the afternoon for the **Medical**, **NonMedical Emergencies** and **Structural Fires**.
 
 ```{r}
 ggplot(fire_data_new,
@@ -1165,7 +1107,7 @@ ggplot(fire_data_new,
   labs(title = "Day Time - Emergency Minutes Time - Incident Class",
        x = "Day Time", y = "Incident Minutes Time", color = "Incident Class")
 ```
-Here interestingly we can see that the longest time taken emergencies are Structural Fires and they happend in the Nighe and on the Morning. Except this we do not have any pattern.
+Here interestingly we can see that the longest time taken emergencies are **Structural Fires** and they happened in the **Night** and in the **Morning**. Except this we do not have any pattern.
 
 
 
@@ -1334,6 +1276,7 @@ fire_data_new <- fire_data_new %>% select(-c(total_assigned_unit))
 
 
 Next before creating any model have to split the cleaned dataset into *train* and *test*, with 80% of the whole dataset for the train set and the remaining 20% for the test set.
+We want to mention that it would be better to perform cross validation using the entire data but for stake of simplicity and time we decide to opt for the classic train-test split. 
 
 ```{r}
 set.seed(43)
@@ -1357,4 +1300,5 @@ write.csv(fire_data.train, "datasets/fire_data_clean.train.csv", row.names=FALSE
 write.csv(fire_data.test, "datasets/fire_data_clean.test.csv", row.names=FALSE)
 ```
 
+Please go to the **Part 2 - Linear Regression** to continue the analysis.
 
