@@ -1,11 +1,9 @@
 
 *.png
-*.csv
 *.Rhistory
 *.RData
 *.rdb
 *.rdx
-*.geojson
 *.__packages
 Fire_Incident_Dispatch_Analysis/Part3_Classification_cache/html/__packages
 Fire_Incident_Dispatch_Analysis/Part1_DatasetAnalysisCleaning_cache/html/__packages

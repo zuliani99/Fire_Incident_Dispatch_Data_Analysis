@@ -23,7 +23,8 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 # installation of packages in case the user has not installed yet
 requirements <- c("nnet", "MASS", "e1071", "class", "leaps", "glmnet", "car", "caTools",
               "pROC", "summarytools", "dplyr", "ggplot2", "tidyverse", "lubridate",
-              "mapview", "sf", "geojsonio", "leaflet", "broom", "gridExtra")
+              "mapview", "sf", "geojsonio", "leaflet", "broom", "gridExtra",
+              "effects")
 
 for (req in requirements){
   if (!require(req, character.only = TRUE)){

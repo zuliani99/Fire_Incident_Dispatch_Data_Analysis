@@ -869,7 +869,7 @@ print(dfSummary(fire_data_new,
 
 
 
-# Data Visaulisation
+# Data Visualisation
 
 In this section we will have a look at additional data visualisation in order to better understand how the predictors behave. We divide this section in multiple subsections each focus on a relative subset of columns.
 

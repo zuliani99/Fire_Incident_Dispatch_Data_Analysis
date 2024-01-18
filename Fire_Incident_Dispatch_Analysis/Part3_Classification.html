@@ -246,70 +246,113 @@ div.tocify {
 
 <div id="load-libraries" class="section level1" number="1">
 <h1><span class="header-section-number">1</span> Load Libraries</h1>
-<pre class="r"><code>library(MASS)
-library(e1071)
-library(class)
-library(leaps)
-library(glmnet)</code></pre>
+<pre class="r"><code># installation of packages in case the user has not installed yet
+requirements &lt;- c(&quot;nnet&quot;, &quot;MASS&quot;, &quot;e1071&quot;, &quot;class&quot;, &quot;leaps&quot;, &quot;glmnet&quot;, &quot;car&quot;, &quot;caTools&quot;,
+              &quot;pROC&quot;, &quot;summarytools&quot;, &quot;dplyr&quot;, &quot;ggplot2&quot;, &quot;tidyverse&quot;, &quot;lubridate&quot;,
+              &quot;mapview&quot;, &quot;sf&quot;, &quot;geojsonio&quot;, &quot;leaflet&quot;, &quot;broom&quot;, &quot;gridExtra&quot;,
+              &quot;effects&quot;)
+
+for (req in requirements){
+  if (!require(req, character.only = TRUE)){
+      install.packages(req)
+  }
+}</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: nnet</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: MASS</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: e1071</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: class</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: leaps</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: glmnet</code></pre>
 <pre><code>## Caricamento del pacchetto richiesto: Matrix</code></pre>
 <pre><code>## Loaded glmnet 4.1-8</code></pre>
-<pre class="r"><code>library(pROC)</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: car</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: carData</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: caTools</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: pROC</code></pre>
 <pre><code>## Type &#39;citation(&quot;pROC&quot;)&#39; for a citation.</code></pre>
 <pre><code>## 
 ## Caricamento pacchetto: &#39;pROC&#39;</code></pre>
 <pre><code>## I seguenti oggetti sono mascherati da &#39;package:stats&#39;:
 ## 
 ##     cov, smooth, var</code></pre>
-<pre class="r"><code>library(leaflet)
-library(tidyverse)</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: summarytools</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: dplyr</code></pre>
+<pre><code>## 
+## Caricamento pacchetto: &#39;dplyr&#39;</code></pre>
+<pre><code>## Il seguente oggetto è mascherato da &#39;package:car&#39;:
+## 
+##     recode</code></pre>
+<pre><code>## Il seguente oggetto è mascherato da &#39;package:MASS&#39;:
+## 
+##     select</code></pre>
+<pre><code>## I seguenti oggetti sono mascherati da &#39;package:stats&#39;:
+## 
+##     filter, lag</code></pre>
+<pre><code>## I seguenti oggetti sono mascherati da &#39;package:base&#39;:
+## 
+##     intersect, setdiff, setequal, union</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: ggplot2</code></pre>
+<pre><code>## Caricamento del pacchetto richiesto: tidyverse</code></pre>
 <pre><code>## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
-## ✔ dplyr     1.1.4     ✔ readr     2.1.5
 ## ✔ forcats   1.0.0     ✔ stringr   1.5.1
-## ✔ ggplot2   3.4.4     ✔ tibble    3.2.1
-## ✔ lubridate 1.9.3     ✔ tidyr     1.3.0
-## ✔ purrr     1.0.2</code></pre>
-<pre><code>## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+## ✔ lubridate 1.9.3     ✔ tibble    3.2.1
+## ✔ purrr     1.0.2     ✔ tidyr     1.3.0
+## ✔ readr     2.1.5     
+## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
 ## ✖ tidyr::expand() masks Matrix::expand()
 ## ✖ dplyr::filter() masks stats::filter()
 ## ✖ dplyr::lag()    masks stats::lag()
 ## ✖ tidyr::pack()   masks Matrix::pack()
+## ✖ dplyr::recode() masks car::recode()
 ## ✖ dplyr::select() masks MASS::select()
+## ✖ purrr::some()   masks car::some()
 ## ✖ tidyr::unpack() masks Matrix::unpack()
-## ℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors</code></pre>
-<pre class="r"><code>library(effects)</code></pre>
-<pre><code>## Caricamento del pacchetto richiesto: carData
-## lattice theme set by effectsTheme()
-## See ?effectsTheme for details.</code></pre>
-<pre class="r"><code>library(ggplot2)
-library(car)</code></pre>
-<pre><code>## 
-## Caricamento pacchetto: &#39;car&#39;
+## ✖ tibble::view()  masks summarytools::view()
+## ℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors
+## Caricamento del pacchetto richiesto: mapview
 ## 
-## Il seguente oggetto è mascherato da &#39;package:dplyr&#39;:
+## Caricamento del pacchetto richiesto: sf
 ## 
-##     recode
+## Linking to GEOS 3.11.2, GDAL 3.7.2, PROJ 9.3.0; sf_use_s2() is TRUE
 ## 
-## Il seguente oggetto è mascherato da &#39;package:purrr&#39;:
+## Caricamento del pacchetto richiesto: geojsonio
 ## 
-##     some</code></pre>
-<pre class="r"><code>library(gridExtra)</code></pre>
-<pre><code>## 
+## Registered S3 method overwritten by &#39;geojsonsf&#39;:
+##   method        from   
+##   print.geojson geojson
+## 
+## 
+## Caricamento pacchetto: &#39;geojsonio&#39;
+## 
+## 
+## Il seguente oggetto è mascherato da &#39;package:base&#39;:
+## 
+##     pretty
+## 
+## 
+## Caricamento del pacchetto richiesto: leaflet
+## 
+## Caricamento del pacchetto richiesto: broom
+## 
+## Caricamento del pacchetto richiesto: gridExtra
+## 
+## 
 ## Caricamento pacchetto: &#39;gridExtra&#39;
 ## 
+## 
 ## Il seguente oggetto è mascherato da &#39;package:dplyr&#39;:
 ## 
-##     combine</code></pre>
-<pre class="r"><code>library(summarytools)</code></pre>
-<pre><code>## 
-## Caricamento pacchetto: &#39;summarytools&#39;
+##     combine
 ## 
-## Il seguente oggetto è mascherato da &#39;package:tibble&#39;:
 ## 
-##     view</code></pre>
+## Caricamento del pacchetto richiesto: effects
+## 
+## lattice theme set by effectsTheme()
+## See ?effectsTheme for details.</code></pre>
 </div>
 <div id="cast-the-anaysis-to-a-calssification-task" class="section level1" number="2">
 <h1><span class="header-section-number">2</span> Cast the anaysis to a Calssification task</h1>
-<p>As mention before we decided like the professor suggested to us, to cast our regression problem in a classification problem by dividing the range of possible time difference response into 2 for a binary classification or more than 2 for a multi-classification task.</p>
+<p>As mentioned before, we decided, as the professor suggested, to cast our regression problem into a classification problem by dividing the range of possible time difference responses into 2 for a binary classification or more than 2 for a multi-classification task.</p>
 <p>We will use the same predictors of the Regression Section so first <code>inc_resp_min_qy</code> and then <code>emergency_min_qy</code>.</p>
 <p>First things first load the cleaned train and test datasets.</p>
 <pre class="r"><code>fire_data_clean.train &lt;- read.csv(&quot;datasets/fire_data_clean.train.csv&quot;, 
