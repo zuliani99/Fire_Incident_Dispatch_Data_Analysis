@@ -28,6 +28,11 @@ library(glmnet)
 library(pROC)
 library(leaflet)
 library(tidyverse)
+library(effects)
+library(ggplot2)
+library(car)
+library(gridExtra)
+library(summarytools)
 ```
 
 
@@ -41,6 +46,9 @@ First things first load the cleaned train and test datasets.
 ```{r, cache=TRUE}
 fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv", stringsAsFactors = TRUE)
 fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv", stringsAsFactors = TRUE)
+
+fire_data_clean.train$cong_dist <- as.factor(fire_data_clean.train$cong_dist)
+fire_data_clean.test$cong_dist <- as.factor(fire_data_clean.test$cong_dist)
 
 fire_data_clean <- rbind(fire_data_clean.train, fire_data_clean.test)
 
@@ -59,21 +67,19 @@ summary(fire_data_clean$inc_resp_min_qy)
 summary(fire_data_clean$emergency_min_qy)
 ```
 
-We start by considering a classical binary classification in which the threshold used as response is the mean of the respective responses, thus:
+We start by considering a classical binary classification in which the threshold used as response is the third quantile of the respective responses, thus:
 
 ```{r}
 # threshold for inc_resp_min_qy
-th_irm <- summary(fire_data_clean$inc_resp_min_qy)[4]
+th_irm <- summary(fire_data_clean$inc_resp_min_qy)[5]
 
 # threshold for emergency_min_qy
-th_eme <- summary(fire_data_clean$emergency_min_qy)[4]
+th_eme <- summary(fire_data_clean$emergency_min_qy)[5]
 ```
 
 
-## Use the range of inc_resp_min_qy as response
+# Use the range of inc_resp_min_qy as response
 
-
-First thing first we 
 ```{r}
 # make a copy of the train and test
 cl_resp_min_fd.train <- fire_data_clean.train
@@ -86,80 +92,227 @@ cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_ir
 # remove the future time differences
 cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(emergency_min_qy, inc_resp_min_qy))
 cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(emergency_min_qy, inc_resp_min_qy))
+
+dfSummary(cl_resp_min_fd.train$fast_response)
+dfSummary(cl_resp_min_fd.test$fast_response)
 ```
+As expected we have an unbalanced case.
 
-
-### Logistic Regression
+## Logistic Regression
 
 Fit our full **Logistic Regression** model.
 
 ```{r}
-res_glm.fit_full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = "binomial")
-summary(res_glm.fit_full)
+res_glm.full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = "binomial")
+summary(res_glm.full)
 ```
 
-We have an $AIC = 29346$, so in order to use this measure we have to compare this model with an other one. 
+So by the summary we can say that:
 
-Update the previous model by adding an interaction terms and removing the non-significant predictors.
+- **inc_borough** is strongly significant for Staten Island and Manhattan
+- **cong_dist** is significant for the congressional district 5 and 12
+- **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**
+- Interestingly the **inc_class_group** is strongly significant only for the fire incident
+- **al_source_desc** and **al_index_desc** have all categorical predictors poorly or slightly statistically significant
+- **working_hour**,  **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant 
+
+
+Let's check if we have some **multicollinearity** problem using the `vif` function as we did on the previous analysis part.
 
 ```{r}
-res_glm.fit_full_upd <- update(res_glm.fit_full, . ~ . - ladders_assigned + al_source_desc : engines_assigned + al_source_desc : others_units_assigned + al_source_desc : ladders_assigned, data = cl_resp_min_fd.train)
-summary(res_glm.fit_full_upd)
+vif(res_glm.full)
 ```
 
 ```{r}
-AIC(res_glm.fit_full, res_glm.fit_full_upd)
+res_glm.clean <- update(res_glm.full, . ~ . - cong_dist - highest_al_level - inc_class_group, data = cl_resp_min_fd.train)
+vif(res_glm.clean)
 ```
 
-We see a substantial decrease of the AIC for the updated model, thus we will use that one to make our predictions.
+Let's see the summary of the updated cleaned model.
+```{r}
+summary(res_glm.clean)
+```
+Compare the **AIC** for the two models.
+```{r}
+AIC(res_glm.full, res_glm.clean) %>% arrange(AIC)
+```
+
+
+
+Now we decide to update the previous model by adding an interaction term for each type of assigned units with the alarm source index.
 
 ```{r}
-res_glm.probs <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response")
+res_glm.clean.inter <- update(res_glm.clean, . ~ . + al_source_desc : engines_assigned + al_source_desc : others_units_assigned + al_source_desc : ladders_assigned, data = cl_resp_min_fd.train)
+summary(res_glm.clean.inter)
 ```
 
-The agreement between predictions and observed survival data is conveniently summarized with a confusion matrix. Below we assign a fast response incident if the estimated probability of being fast is larger than 0.5: 
 ```{r}
-res_preds50 <- predict(res_glm.fit_full_upd, newdata = cl_resp_min_fd.test, type = "response") > 0.5
-table(preds = res_preds50, true = cl_resp_min_fd.test$fast_response)
+AIC(res_glm.full, res_glm.clean, res_glm.clean.inter) %>% arrange(AIC)
 ```
-The accuracy of the logistic regression classifier with the 50% threshold is:
+And by looking at the **AIC** we can say that this model is better than the initial full model.
+
+Now to have a complete comparison we decided to add also the interaction terms for the initial full model.
+
 ```{r}
-mean(res_preds50 == cl_resp_min_fd.test$fast_response)
+res_glm.full.inter <- update(res_glm.full, . ~ . + al_source_desc : engines_assigned + al_source_desc : others_units_assigned + al_source_desc : ladders_assigned, data = cl_resp_min_fd.train)
+summary(res_glm.full.inter)
 ```
-
-Sensitivity and specificity are  ```r sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)``` / ```r sum(cl_resp_min_fd.test$fast_response == TRUE)``` = ```r round(sum(res_preds50 == TRUE & cl_resp_min_fd.test$fast_response == TRUE)/sum(cl_resp_min_fd.test$fast_response == TRUE), 2)``` and ```r sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)``` / ```r sum(cl_resp_min_fd.test$fast_response == FALSE)``` = ```r round(sum(res_preds50 == FALSE & cl_resp_min_fd.test$fast_response == FALSE)/sum(cl_resp_min_fd.test$fast_response == FALSE), 2)```, respectively.
-
-The ROC curve can be computed with package **pROC**:
-```{r message = FALSE}
-res_glm.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.probs, plot = TRUE, print.auc = TRUE)
-```
-
-The AUC for this logistic regression is ```r round(res_glm.roc$auc, 2)```. Now we use the function **coords** of package **pROC** to extract the coordinates of the ROC  at the *best point*, which corresponding to the maximum of the sum of sensitivity and specificity (see the online help of **coords** for more details
 ```{r}
-coords(res_glm.roc, x = "best", ret = "all")
+AIC(res_glm.full, res_glm.full.inter, res_glm.clean, res_glm.clean.inter) %>% arrange(AIC)
 ```
-Moreover according to the output of **coords**, the optimal choice corresponds to a threshold of ```r round(coords(res_glm.roc, x = "best")[1], 2)``` with a corresponding accuracy of:
+It seems like that the full model with the interaction terms outperform the other specified models, later we will see if this statements holds or not during predictions.
+
+## Logistic Regression Model Comparison
+
+Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
+
 ```{r}
-res_acc_glm <- coords(res_glm.roc, x = "best", ret = "all")$accuracy
-res_acc_glm
+res_glm.full.pred <- predict(res_glm.full, newdata = cl_resp_min_fd.test, type = "response")
+res_glm.full.inter.pred <- predict(res_glm.full.inter, newdata = cl_resp_min_fd.test, type = "response")
+
+res_glm.clean.pred <- predict(res_glm.clean, newdata = cl_resp_min_fd.test, type = "response")
+res_glm.clean.inter.pred <- predict(res_glm.clean.inter, newdata = cl_resp_min_fd.test, type = "response")
 ```
 
 
+
+At this point we use the `pROC` library in order to extrapolate the best threshold using the function `roc`.
+
+```{r}
+par(mfrow=c(2,2))
+
+res_glm.full.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.full.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.full.pred ROC curve")
+res_glm.full.inter.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.full.inter.pred, print.auc = TRUE, plot = TRUE, main = "res_glm.full.inter.pred ROC curve")
+
+res_glm.clean.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.clean.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
+res_glm.clean.inter.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.clean.inter.pred, print.auc = TRUE, plot = TRUE, main = "res_glm.clean.inter.pred ROC curve")
+```
+By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
+
+Now we extract from each results the best curve measure to perform a deeper analysis.
+
+```{r}
+res_glm.full.roc.bmetrics <- coords(res_glm.full.roc, x = "best", ret = "all")
+res_glm.full.inter.roc.bmetrics <- coords(res_glm.full.inter.roc, x = "best", ret = "all")
+
+res_glm.clean.roc.bmetrics <- coords(res_glm.clean.roc, x = "best", ret = "all")
+res_glm.clean.inter.roc.bmetrics <- coords(res_glm.clean.inter.roc, x = "best", ret = "all")
+```
+
+Rename the single row for each dataframe and concatenate all in a single one.
+```{r}
+row.names(res_glm.full.roc.bmetrics) <- "Full Model"
+row.names(res_glm.full.inter.roc.bmetrics) <- "Interaction Full Model"
+
+row.names(res_glm.clean.roc.bmetrics) <- "Cleaned Model"
+row.names(res_glm.clean.inter.roc.bmetrics) <- "Interaction Cleaned Model"
+
+res_results <- rbind(res_glm.full.roc.bmetrics, res_glm.full.inter.roc.bmetrics, res_glm.clean.roc.bmetrics, res_glm.clean.inter.roc.bmetrics)
+```
+
+
+
+
+Now we make a comparisons result:
+
+1) **Specificity**
+```{r}
+res_results %>% select(specificity) %>% arrange(desc(specificity))
+```
+In terms of specificity the best model is the **Cleaned Model**.
+
+2) **Sensitivity**
+```{r}
+res_results %>% select(sensitivity) %>% arrange(desc(sensitivity))
+```
+Regarding the sensitivity the best model is the **Full Model**.
+
+3) **Accuracy**
+```{r}
+res_results %>% select(accuracy) %>% arrange(desc(accuracy))
+```
+And finally for the accuracy measure the best model is the **Full Model**.
+
+Howver we recall that we have an unbalanced case for the respnse, since:
+
+```{r}
+dfSummary(cl_resp_min_fd.test[,"fast_response"])
+```
+
+Exactly 3/4 of the test dataset have a fast response, whereas the rest has a low response. For this reason model choice should happen on the model that is able to correctly classify the response time of an incident, thus we choose the **Full Model** since it has the higher accuracy and sensitivity.
+
+Let's have a quick look on the confusion matrix for the four model that we have specified.
+
+1- **Full Model**
+```{r}
+table(preds=(res_glm.full.pred > res_glm.full.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+2- **Interaction Full Model**
+```{r}
+table(preds=(res_glm.full.inter.pred > res_glm.full.inter.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+3- **Cleaned Model**
+```{r}
+table(preds=(res_glm.clean.pred > res_glm.clean.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+4- **Interaction Cleaned Model**
+```{r}
+table(preds=(res_glm.clean.inter.pred > res_glm.clean.inter.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+
+## Logistic Regression Model Interpretation
+
+We decide to interpret the model with the lower AIC, so the **res_glm.full.inter** which has ```r AIC(res_glm.full.inter)``` as AIC.
+
+For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
+```{r}
+summary(res_glm.full.inter)
+```
+
+We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `working_hour`.
+```{r}
+plot( effect("inc_borough", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+```
+
+The lower probability of having a fast response is for The Bronx, whereas the higher are in the borough of Brooklyn and Staten Island.
+
+```{r}
+plot(effect("inc_class_group", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+```
+As expected we have higher probability to have a fast response for the **Fire** and **NonFire Emergencies** incident and lower for **Medical Emergencies** and **Medical MFAs**. 
+
+
+```{r}
+plot(effect("others_units_assigned", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+```
+INterestingly we can see that the **others_units_assigned** follow a logarithmic curve. 
+
+```{r}
+plot(effect("working_hour", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+```
+
+And we have an higher probability to have a fast response for the working hour.
 
 
 Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
 
-We start by using **Ridge Regression**. First of all we have to create our model matrices.
+## Ridge Shrinkage Estimation
+We decide to use the full model with interaction terms in order to see how ridge is able to shrinkage the coefficients.
+
+First of all we have to create our model matrices.
 ```{r}
 # model matrix for train
-x_train <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+x_train <- model.matrix(formula(res_glm.full.inter), data = cl_resp_min_fd.train)
 y_train <- cl_resp_min_fd.train$fast_response
 
 # mode matrix for test
-x_test <- model.matrix(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.test)
+x_test <- model.matrix(formula(res_glm.full.inter), data = cl_resp_min_fd.test)
 y_test <- cl_resp_min_fd.test$fast_response
 ```
-
 
 
 
@@ -168,21 +321,13 @@ y_test <- cl_resp_min_fd.test$fast_response
 ```{r}
 res_fit.ridge <- glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
 plot(res_fit.ridge, xvar = "lambda", label = TRUE)
+```
+Choose the best value of lambda via cross-validation.
+```{r}
 res_cv.ridge <- cv.glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
 plot(res_cv.ridge)
 ```
 
-
-
-Here we can see the plot of the coefficients.
-
-The penalty on Lasso is put in the sum of square of the coefficients. And that's controlled by the parameter lambda, so the criteria for Ridge reression ins the following one:
-
-$$L(ridge) = RSS + \lambda \sum_{j=1}^p \beta_j^2$$
-
-It tryies to minimize e RSS but the loss is modified by a penalty of the sum of squares of the coefficiets. So il $\lambda$ is big we want to have the sum of square of the coeffcients small, so that shrike the coefficeints towards zero. And if lambda becomes very bug all the coefficeints wil become zero.
-
-Unlike Best Subset Regression wich controls the complexity of the models by restricting thr number of variables, RIdge Regression keeps all the variables in and shrinke the coefficeints toward zero
 
 The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
 
@@ -197,44 +342,58 @@ However, empirical experience suggests to select the simplest model whose $\lamb
 res_bestlam.ridge <- res_cv.ridge$lambda.1se
 res_bestlam.ridge
 ```
-
 Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
 
 ```{r}
-plot(res_fit.ridge, xvar = "lambda") ## notice xvar = "lambda"
+plot(res_fit.ridge, xvar = "lambda")
 abline(v = log(res_bestlam.ridge), lwd = 1.2, lty = "dashed")
 ```
 
-We make the prediction on the test set and analyse the result by the confusion matrix.
+We make the prediction on the test set.
 
 ```{r}
-pred_ridge <- predict(res_fit.ridge, s = res_bestlam.ridge, newx = x_test, type = "response") > 0.5
-table(preds = pred_ridge, true = y_test)
+res_fit.ridge.pred <- predict(res_fit.ridge, s = res_bestlam.ridge, newx = x_test, type = "response")
 ```
 
-Finally the accuracy on the test set is:
-
+Apply the `roc` function in order to get the best threshold value.
 ```{r}
-res_acc_glm_ridge <- mean(pred_ridge == y_test)
-res_acc_glm_ridge
+res_fit.ridge.roc <- roc(y_test ~ res_fit.ridge.pred, plot = TRUE, print.auc = TRUE) 
 ```
 
-Now is the turn of **Lasso**.
+See the results
+```{r}
+res_fit.ridge.roc.bmetrics <- coords(res_fit.ridge.roc, x="best", ret="all")
+res_fit.ridge.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(res_fit.ridge.pred > res_fit.ridge.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
 
 
-The difference between Lasso and Ridge is the penalty of the sum of the coefficients, indeed the lasso loss function is the following one:
+Concatenate with the other results.
+```{r}
+row.names(res_fit.ridge.roc.bmetrics) <- "Inteaction Full Moldel Ridge"
+res_results <- rbind(res_results, res_fit.ridge.roc.bmetrics)
+```
 
-$$L(lasso) = RSS + \lambda \sum_{j=1}^p |\beta_j|$$
-
-Instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients. This is also controlling the size of the coefficients, since by penalize the sum of absolute value, that's actually going to restrict some of the coefficients to be actually zero.
 
 
+
+## Lasso Shrinkage Estimation
+
+Now is the turn of lasso and we decide to use again the full model with interaction for the same reason of ridge.
 
 ```{r}
 res_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
 plot(res_fit.lasso)
+```
+
+Again choose the best lambda via cross-validation.
+```{r}
 res_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
-plot(res_cv.lasso) ## lasso path plot
+plot(res_cv.lasso)
 ```
 
 The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
@@ -243,90 +402,128 @@ The value of $\lambda$ that minimizes the ridge cross-validated mean square erro
 res_cv.lasso$lambda.min
 ```
 
-
 Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
 
 ```{r }
 res_bestlam.lasso <- res_cv.lasso$lambda.1se
 res_bestlam.lasso
 ```
-
-
 Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
 
 ```{r }
-plot(res_fit.lasso, xvar = "lambda") ## notice xvar = "lambda"
+plot(res_fit.lasso, xvar = "lambda")
 abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
 ```
 
-We make the prediction on the test set and analyse the result by the confusion matrix.
 
+Now we apply prediction on the test set.
 ```{r}
-pred_lasso <- predict(res_fit.lasso, s = res_bestlam.lasso, newx = x_test, type = "response") > 0.5
-table(preds = pred_lasso, true = y_test)
+res_fit.lasso.pred <- predict(res_fit.lasso, s = res_bestlam.lasso, newx = x_test, type = "response")
+```
+
+Then we apply the `roc` function to obtain the best threshold value.
+```{r}
+res_fit.lasso.roc <- roc(y_test ~ res_fit.lasso.pred, plot = TRUE, print.auc = TRUE) 
+```
+
+See the result.
+```{r}
+res_fit.lasso.roc.bmetrics <- coords(res_fit.lasso.roc, x="best", ret="all")
+res_fit.lasso.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(res_fit.lasso.pred > res_fit.lasso.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+Concatenate with the other results.
+```{r}
+row.names(res_fit.lasso.roc.bmetrics) <- "Inteaction Full Moldel Lasso"
+res_results <- rbind(res_results, res_fit.lasso.roc.bmetrics)
 ```
 
 
-Finally the accuracy on the test set is:
-
-```{r}
-res_acc_glm_lasso <- mean(pred_ridge == y_test)
-res_acc_glm_lasso
-```
 
 
+## Linear Discriminant Analysis
 
-Now we are going to deal with **LDA** or **Linear Discriminant Analysis**.
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again to use the full model with interaction terms.
 
 
 ```{r}
-# use the fucntion formula to replicate the model formula of the second glml model
-res_lda.fit <- lda(formula(res_glm.fit_full_upd), data = cl_resp_min_fd.train)
+res_lda.fit <- lda(formula(res_glm.full.inter), data = cl_resp_min_fd.train)
 res_lda.fit
 ```
 The printed output of **lda** includes:
 
-- the a-priori probabilities of survival;
-- the group means.
+- The a-priori probabilities of fast response
+- The group means.
 
-We make the prediction on the test set and analyse the result by the confusion matrix.
+The a-priori probabilities correspond to the sample proportion of fast response of the train dataset.
+
+An example of group mean is the mean average probability that an incident happen in the borough of Brooklyn having a fast response time.
+```{r}
+with(cl_resp_min_fd.train, mean(inc_borough[fast_response == TRUE] == "Brooklyn"))
+```
+
+
+Now we make the prediction on the test set.
 ```{r}
 res_lda.preds <- predict(res_lda.fit, newdata = cl_resp_min_fd.test, type = "response")
-table(preds = res_lda.preds$class, true = cl_resp_min_fd.test$fast_response)
 ```
 
 
-And finally computing the accuracy:
-```{r}
-mean(res_lda.preds$class == cl_resp_min_fd.test$fast_response)
-```
-
-The ROC curve for linear discriminant analysis is
+The ROC curve for linear discriminant analysis is:
 ```{r}
 res_lda.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
-coords(res_lda.roc, x = "best", ret = "all")
 ```
 The best choice for the threshold of linear discriminant analysis yields an accuracy of:
 ```{r}
-res_acc_lda <- coords(res_lda.roc, x = "best", ret = "all")$accuracy
-res_acc_lda
+res_lda.roc.bmetrics <- coords(res_lda.roc, x = "best", ret = "all")
+res_lda.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(res_lda.preds$posterior[, 2] > res_lda.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+Concatenate with the other results.
+```{r}
+row.names(res_lda.roc.bmetrics) <- "Linear Discriminant Analysis"
+res_results <- rbind(res_results, res_lda.roc.bmetrics)
 ```
 
 
 
-Continuing with the analysis we try **Naive Bayes** algorithm.
+
+
+
+
+## Naive Baye
+
+Continuing with the analysis we try **Naive Bayes** algorithm. In this case we can't use a model with interaction term since Naive Bayes do not support these relations. Thus we decide to use the **Full Model**.
 
 ```{r}
-res_nb.fit <- naiveBayes(formula(res_glm.fit_full), data = cl_resp_min_fd.train)
+res_nb.fit <- naiveBayes(formula(res_glm.full), data = cl_resp_min_fd.train)
 res_nb.fit
 ```
 
 
 The output of **naiveBayes** contains:
 
-- the estimated a-priori probabilities; 
-- the estimated conditional probabilities for the qualitative variables;
-- the estimated group means and standard deviations for the quantitative variables.
+- The estimated a-priori probabilities; 
+- The estimated conditional probabilities for the qualitative variables;
+
+The a-priori probabilities again correspond to the sample proportion of fast response of the train dataset.
+
+An example of group mean is the mean average probability that an incident happen in the evening having a slow response time.
+```{r}
+with(cl_resp_min_fd.train, mean(time_of_day[fast_response == FALSE] == "Evening"))
+```
+
 
 Prediction for the test set:
 ```{r}
@@ -336,62 +533,535 @@ table(preds = res_nb.preds, true = cl_resp_min_fd.test$fast_response)
 
 Predicted class probabilities can be obtained using the argument **type = "raw"**:
 ```{r}
-nb.posterior <- predict(res_nb.fit, newdata = cl_resp_min_fd.test, type = "raw")
-head(nb.posterior)
+res_nb.posterior <- predict(res_nb.fit, newdata = cl_resp_min_fd.test, type = "raw")
+head(res_nb.posterior)
 ```
 
 ROC curve:
 ```{r}
-res_nb.roc <- roc(cl_resp_min_fd.test$fast_response ~ nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
-coords(res_nb.roc, x = "best", ret = "all")
+res_nb.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
 ```
-The accuracy for the best choice of the threshold of Naive Bayes is:
-```{r}
-res_acc_nb <- coords(res_nb.roc, x = "best", ret = "all")$accuracy
-res_acc_nb
-```
-
-
-
-
-And finally we deal with **KNN**. KNN has a random component because if there are ties among the nearest neighbors, then **R** will randomly sample so to break the ties. Therefore, we fix the seed of the pseudorandom generator in order to preserve the reproducibility of the results and then run KNN with k=5:
-```{r}
-set.seed(98765)
-res_preds.knn <- knn(train = x_train, test = x_test, cl = y_train , k = 5)
-```
-
-Confusion matrix for KNN with k=5:
-```{r}
-table(preds = res_preds.knn, true = y_test)
-```
-With a corresponding accuracy equal to:
-```{r}
-mean(res_preds.knn == y_test)
-```
-But what happens if we modify the number of neighbours? Below KNN is run for say k from 1 to 20:
-```{r}
-rates <- double(20)
-
-for (i in 1:20) {
-  tmp <- knn(train = x_train, test = x_test, cl = y_train, k = i)
-  rates[i] <- mean(tmp == y_test)
-}
-
-plot(x = (1:20), y = rates, xlab = "k", ylab = "Accuracy", type = "l")
-```
-
-The highest accuracy is obtained with k = ```{r} which.max(rates) ``` and with an accuracy of
 
 ```{r}
-res_acc_knn <- max(rates)
+res_nb.roc.bmetrics <- coords(res_nb.roc, x = "best", ret = "all")
+res_nb.roc.bmetrics
 ```
 
-
-Summary of results for the Classification task with `fast_response` as response:
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(res_nb.posterior[, 2] > res_nb.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
 
 ```{r}
-data.frame (
-  metho = c("GLM", "GLM_ridge", "GLM_lasso", "LDA", "Naive Bayes", "KNN"),
-  test_Accuracy = c(res_acc_glm, res_acc_glm_ridge, res_acc_glm_lasso, res_acc_lda, res_acc_nb, res_acc_knn)
-)
+row.names(res_nb.roc.bmetrics) <- "Naive Bayes"
+res_results <- rbind(res_results, res_nb.roc.bmetrics)
 ```
+
+
+
+
+## Conclusion
+Finally we make a recap of the final results that we have obtained.
+```{r}
+res_results
+```
+
+
+1) **Specificity**
+```{r}
+res_results %>% select(specificity) %>% arrange(desc(specificity))
+```
+
+For the specificity the best model is **LDA**.
+
+2) **Sensitivity**
+```{r}
+res_results %>% select(sensitivity) %>% arrange(desc(sensitivity))
+```
+
+For sensitivity the best model is **Naive Bayes**.
+
+3) **Accuracy**
+```{r}
+res_results %>% select(accuracy) %>% arrange(desc(accuracy))
+```
+Finally regarding the accuracy measure the best model is again the **Full Model**.
+
+In conclusion for this analysis we have seen that more or less all the model that we have tried have similar performance and interestingly the initial model that we have specified is the one that better solve our prediction task of trying to predict if a given incident call has a fast or low response time.
+
+
+
+
+
+
+
+
+
+
+
+# Use the range of emergency_min_qy as response
+
+Now we will use the second response and perform a similar analysis.
+
+```{r}
+# make a copy of the train and test
+cl_emerg_min_fd.train <- fire_data_clean.train
+cl_emerg_min_fd.test <- fire_data_clean.test
+
+cl_emerg_min_fd.train$fast_emergency <- cl_emerg_min_fd.train$emergency_min_qy < th_eme
+cl_emerg_min_fd.test$fast_emergency <- cl_emerg_min_fd.test$emergency_min_qy < th_eme
+
+# remove the future time differences and units counts
+cl_emerg_min_fd.train <- cl_emerg_min_fd.train %>% select(-c(emergency_min_qy))
+cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy))
+```
+
+
+
+
+
+
+## Logistic Regression
+
+Fit our full **Logistic Regression** model.
+
+```{r}
+eme_glm.full <- glm(fast_emergency ~ ., data = cl_emerg_min_fd.train, family = "binomial")
+summary(eme_glm.full)
+```
+
+So by the summary we can say that:
+
+- **inc_borough** is strongly significant for Manhattan
+- **cong_dist** is high significant for the congressional district 13
+- **al_source_desc** are all strongly significant
+- **al_index_desc** is strongly significant only for the categorical value *Initial Alarm*
+- **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**
+- **inc_class_group** is strongly significant for about every categorical value
+- Differently from the previous anaysis **working_hour** is not significant
+- **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant 
+
+
+Let's check if we have some **multicollinearity** problem using the `vif` function as we did on the previous analysis part.
+
+```{r}
+vif(eme_glm.full)
+```
+
+```{r}
+eme_glm.clean <- update(eme_glm.full, . ~ . - cong_dist - highest_al_level - inc_class_group - day_type - working_hour, data = cl_emerg_min_fd.train)
+vif(eme_glm.clean)
+```
+
+Let's see the summary of the updated cleaned model.
+```{r}
+summary(eme_glm.clean)
+```
+Compare the **AIC** for the two models.
+```{r}
+AIC(eme_glm.full, eme_glm.clean) %>% arrange(AIC)
+```
+
+
+We have tried many interaction terms and scaling predictors but all the edits of the previous model ends up having an AIC worse respect to the cleaned model, thus we decide to stop here and continue with the prediction and comparison step of the thwo specified models.
+
+
+
+## Logistic Regression Model Comparison
+
+Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
+
+```{r}
+eme_glm.full.pred <- predict(eme_glm.full, newdata = cl_emerg_min_fd.test, type = "response")
+eme_glm.clean.pred <- predict(eme_glm.clean, newdata = cl_emerg_min_fd.test, type = "response")
+```
+
+
+
+At this point we use the `pROC` library in order to extrapolate the best threshold using the function `roc`.
+
+```{r}
+par(mfrow=c(1,2))
+
+eme_glm.full.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_glm.full.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.full.pred ROC curve")
+eme_glm.clean.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_glm.clean.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
+```
+By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
+
+Now we extract from each results the best curve measure to perform a deeper analysis.
+
+```{r}
+eme_glm.full.roc.bmetrics <- coords(eme_glm.full.roc, x = "best", ret = "all")
+eme_glm.clean.roc.bmetrics <- coords(eme_glm.clean.roc, x = "best", ret = "all")
+```
+
+Rename the single row for each dataframe and concatenate all in a single one.
+```{r}
+row.names(eme_glm.full.roc.bmetrics) <- "Full Model"
+row.names(eme_glm.clean.roc.bmetrics) <- "Cleaned Model"
+
+eme_results <- rbind(eme_glm.full.roc.bmetrics, eme_glm.clean.roc.bmetrics)
+```
+
+
+
+
+Now we make a comparisons result:
+
+1) **Specificity**
+```{r}
+eme_results %>% select(specificity) %>% arrange(desc(specificity))
+```
+In terms of specificity the best model is the **Cleaned Model**.
+
+2) **Sensitivity**
+```{r}
+eme_results %>% select(sensitivity) %>% arrange(desc(sensitivity))
+```
+Regarding the sensitivity the best model is the **Full Model**.
+
+3) **Accuracy**
+```{r}
+eme_results %>% select(accuracy) %>% arrange(desc(accuracy))
+```
+And finally for the accuracy measure the best model is the **Full Model**.
+
+Howver we recall that we have an unbalanced case for the respnse, since:
+
+```{r}
+dfSummary(cl_emerg_min_fd.test[,"fast_emergency"])
+```
+
+Like in the previous analysis exactly 3/4 of the test dataset is a fast emergency, whereas the rest has a long time taken emergency For this reason model choice should happen on the model that is able to correctly classify the response time of an incident, thus differently w.r.t the first analysis we choose the **Cleaned Model** since it has the higher accuracy and sensitivity.
+
+Let's have a quick look on the confusion matrix for the four model that we have specified.
+
+1- **Full Model**
+```{r}
+table(preds=(eme_glm.full.pred > eme_glm.full.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+```
+
+2- **Cleaned Model**
+```{r}
+table(preds=(eme_glm.clean.pred > eme_glm.clean.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+```
+
+
+
+## Logistic Regression Model Interpretation
+
+We decide to interpret the model with the lower AIC, so the **eme_glm.full** which has ```r AIC(eme_glm.full)``` as AIC.
+
+For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
+```{r}
+summary(eme_glm.full)
+```
+
+We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `inc_resp_min_qy`.
+```{r}
+plot(effect("inc_borough", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+```
+
+The lower probability of having a fast emergency is for The Bronx but with an high confidence interval, whereas the higher is in the borough of Brooklyn and Staten Island, with the latter having a smaller interval respect to the former.
+
+```{r}
+plot(effect("inc_class_group", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+```
+
+As expected we have a lower probability to have a fast emergency for the and **NonFire Emergencies** and **Medical Emergencies**. On the other hand we have the higher probability of having a fast emergency for the **Medical MFAs** even if there is a big confidence interval.
+
+
+```{r}
+plot(effect("others_units_assigned", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+```
+As expected the probability of having a fast emergency is higher having few others units assigned to the incident.
+
+```{r}
+plot(effect("inc_resp_min_qy", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+```
+
+As expected having a quick response time is much likely to have higher probability of fast emergency.
+
+
+Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+
+
+
+
+## Ridge Shrinkage Estimation
+We decide to use the full model in order to see how ridge is able to shrinkage the coefficients.
+
+First of all we have to create our model matrices.
+```{r}
+# model matrix for train
+x_train <- model.matrix(formula(eme_glm.full), data = cl_emerg_min_fd.train)
+y_train <- cl_emerg_min_fd.train$fast_emergency
+
+# mode matrix for test
+x_test <- model.matrix(formula(eme_glm.full), data = cl_emerg_min_fd.test)
+y_test <- cl_emerg_min_fd.test$fast_emergency
+```
+
+
+
+
+
+```{r}
+eme_fit.ridge <- glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
+plot(eme_fit.ridge, xvar = "lambda", label = TRUE)
+```
+
+Choose the best value of lambda via cross-validation.
+```{r}
+eme_cv.ridge <- cv.glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
+plot(eme_cv.ridge)
+```
+
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+eme_cv.ridge$lambda.min
+```
+
+
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+eme_bestlam.ridge <- eme_cv.ridge$lambda.1se
+eme_bestlam.ridge
+```
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r}
+plot(eme_fit.ridge, xvar = "lambda")
+abline(v = log(eme_bestlam.ridge), lwd = 1.2, lty = "dashed")
+```
+
+We make the prediction on the test set.
+
+```{r}
+eme_fit.ridge.pred <- predict(eme_fit.ridge, s = eme_bestlam.ridge, newx = x_test, type = "response")
+```
+
+Apply the `roc` function in order to get the best threshold value.
+```{r}
+eme_fit.ridge.roc <- roc(y_test ~ eme_fit.ridge.pred, plot = TRUE, print.auc = TRUE) 
+```
+
+See the results
+```{r}
+eme_fit.ridge.roc.bmetrics <- coords(eme_fit.ridge.roc, x="best", ret="all")
+eme_fit.ridge.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(eme_fit.ridge.pred > eme_fit.ridge.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+```
+
+
+Concatenate with the other results.
+```{r}
+row.names(eme_fit.ridge.roc.bmetrics) <- "Full Moldel Ridge"
+eme_results <- rbind(eme_results, eme_fit.ridge.roc.bmetrics)
+```
+
+
+
+
+## Lasso Shrinkage Estimation
+
+Now is the turn of lasso and we decide to use again the full model for the same reason of ridge.
+
+```{r}
+eme_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(eme_fit.lasso)
+```
+
+Again choose the best lambda via cross-validation.
+```{r}
+eme_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
+plot(eme_cv.lasso)
+```
+
+The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+
+```{r}
+eme_cv.lasso$lambda.min
+```
+
+Again like before we take as $\lambda$ value corresponding to one standard error from the minimum of the cross-validated mean square error:
+
+```{r }
+eme_bestlam.lasso <- eme_cv.lasso$lambda.1se
+eme_bestlam.lasso
+```
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+```{r }
+plot(eme_fit.lasso, xvar = "lambda")
+abline(v = log(eme_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+
+Now we apply prediction on the test set.
+```{r}
+eme_fit.lasso.pred <- predict(eme_fit.lasso, s = eme_bestlam.lasso, newx = x_test, type = "response")
+```
+
+Then we apply the `roc` function to obtain the best threshold value.
+```{r}
+eme_fit.lasso.roc <- roc(y_test ~ eme_fit.lasso.pred, plot = TRUE, print.auc = TRUE) 
+```
+
+See the result.
+```{r}
+eme_fit.lasso.roc.bmetrics <- coords(eme_fit.lasso.roc, x="best", ret="all")
+eme_fit.lasso.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(eme_fit.lasso.pred > eme_fit.lasso.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+```
+
+Concatenate with the other results.
+```{r}
+row.names(eme_fit.lasso.roc.bmetrics) <- "Full Moldel Lasso"
+eme_results <- rbind(eme_results, eme_fit.lasso.roc.bmetrics)
+```
+
+
+
+
+## Linear Discriminant Analysis
+
+
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again to use the full model.
+
+
+```{r}
+eme_lda.fit <- lda(formula(eme_glm.full), data = cl_emerg_min_fd.train)
+eme_lda.fit
+```
+
+
+An example of group mean is the mean average response time in minutes of an incident that having a fast emergency.
+```{r}
+with(cl_emerg_min_fd.train, mean(inc_resp_min_qy[fast_emergency == TRUE]))
+```
+
+
+Now we make the prediction on the test set.
+```{r}
+eme_lda.preds <- predict(eme_lda.fit, newdata = cl_emerg_min_fd.test, type = "response")
+```
+
+
+The ROC curve for linear discriminant analysis is:
+```{r}
+eme_lda.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+```
+The best choice for the threshold of linear discriminant analysis yields an accuracy of:
+```{r}
+eme_lda.roc.bmetrics <- coords(eme_lda.roc, x = "best", ret = "all")
+eme_lda.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(eme_lda.preds$posterior[, 2] > eme_lda.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+```
+
+Concatenate with the other results.
+```{r}
+row.names(eme_lda.roc.bmetrics) <- "Linear Discriminant Analysis"
+eme_results <- rbind(eme_results, eme_lda.roc.bmetrics)
+```
+
+
+
+
+
+
+
+## Naive Baye
+
+Continuing with the analysis we try **Naive Bayes** algorithm. In this case we can't use a model with interaction term since Naive Bayes do not support these relations. Thus we decide to use the **Full Model**.
+
+```{r}
+eme_nb.fit <- naiveBayes(formula(eme_glm.full), data = cl_emerg_min_fd.train)
+eme_nb.fit
+```
+
+An example of group mean is the mean probability that an incident have a single unit assigned being a fast emergency.
+```{r}
+with(cl_emerg_min_fd.train, mean(tua_is_one[fast_emergency == TRUE] == TRUE))
+```
+
+Prediction for the test set:
+```{r}
+eme_nb.preds <- predict(eme_nb.fit, newdata = cl_emerg_min_fd.test)
+table(preds = eme_nb.preds, true = cl_emerg_min_fd.test$fast_emergency)
+```
+
+Predicted class probabilities can be obtained using the argument **type = "raw"**:
+```{r}
+eme_nb.posterior <- predict(eme_nb.fit, newdata = cl_emerg_min_fd.test, type = "raw")
+head(eme_nb.posterior)
+```
+
+ROC curve:
+```{r}
+eme_nb.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+```
+
+```{r}
+eme_nb.roc.bmetrics <- coords(eme_nb.roc, x = "best", ret = "all")
+eme_nb.roc.bmetrics
+```
+
+See the confusion matrix using the best threshold value.
+```{r}
+table(preds=(eme_nb.posterior[, 2] > eme_nb.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+```
+
+```{r}
+row.names(eme_nb.roc.bmetrics) <- "Naive Bayes"
+eme_results <- rbind(eme_results, eme_nb.roc.bmetrics)
+```
+
+
+
+## Conclusion
+Finally we make a recap of the final results that we have obtained.
+```{r}
+eme_results
+```
+
+
+1) **Specificity**
+```{r}
+eme_results %>% select(specificity) %>% arrange(desc(specificity))
+```
+
+For the specificity the best model is **LDA**.
+
+2) **Sensitivity**
+```{r}
+eme_results %>% select(sensitivity) %>% arrange(desc(sensitivity))
+```
+
+For sensitivity the best model is **Naive Bayes**.
+
+3) **Accuracy**
+```{r}
+eme_results %>% select(accuracy) %>% arrange(desc(accuracy))
+```
+Finally regarding the accuracy measure the best model is again the **Cleaned Model**.
+
+In again more or less we have similar results for all the model, however differently from the previous analysis this time we choose as best overall model the Cleaned one
+
+
+

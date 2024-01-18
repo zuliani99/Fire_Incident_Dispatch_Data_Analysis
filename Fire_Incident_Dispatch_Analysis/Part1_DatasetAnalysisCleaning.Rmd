@@ -318,7 +318,9 @@ It seems like that there are slightly more incident during the working hour.
 
 
 
-## Process Spatial Data
+## Column Value Renaming
+
+### inc_borough and al_borough
 
 Rename the factor levels for the `inc_borough` and `al_borough`.
 
@@ -334,6 +336,14 @@ fire_data <- fire_data %>% mutate(inc_borough = recode_factor(
 
 Regarding the Spatial Data we decide to keep the borough and also the congressional district since are the two predictors that have the least number of categories. Further in the section of data visualization we have a look on an interactive map of some relevant information for both aspects. 
 
+
+### inc_class_group
+
+```{r}
+fire_data <- fire_data %>% mutate(inc_class_group = recode_factor(
+      inc_class_group, "Medical Emergencies" = "M_E", "NonMedical Emergencies" = "NonM_E", "Medical MFAs" = "M_MFAs",
+      "NonMedical MFAs" = "NonM_MFAs", "Structural Fires" = "S_F", "NonStructural Fires" = "NonS_F"))
+```
 
 ## Merging Factors
 
