@@ -20,32 +20,31 @@ setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Lea
 # Load Libraries
 
 ```{r}
-library(MASS)
-library(e1071)
-library(class)
-library(leaps)
-library(glmnet)
-library(pROC)
-library(leaflet)
-library(tidyverse)
-library(effects)
-library(ggplot2)
-library(car)
-library(gridExtra)
-library(summarytools)
+# installation of packages in case the user has not installed yet
+requirements <- c("nnet", "MASS", "e1071", "class", "leaps", "glmnet", "car", "caTools",
+              "pROC", "summarytools", "dplyr", "ggplot2", "tidyverse", "lubridate",
+              "mapview", "sf", "geojsonio", "leaflet", "broom", "gridExtra")
+
+for (req in requirements){
+  if (!require(req, character.only = TRUE)){
+      install.packages(req)
+  }
+}
 ```
 
 
 # Cast the anaysis to a Calssification task
 
-As mention before we decided like the professor suggested to us, to cast our regression problem in a classification problem by dividing the range of possible time difference response into 2 for a binary classification or more than 2 for a multi-classification task.
+As mentioned before, we decided, as the professor suggested, to cast our regression problem into a classification problem by dividing the range of possible time difference responses into 2 for a binary classification or more than 2 for a multi-classification task.
 
 We will use the same predictors of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
 
 First things first load the cleaned train and test datasets.
 ```{r, cache=TRUE}
-fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv", stringsAsFactors = TRUE)
-fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv", stringsAsFactors = TRUE)
+fire_data_clean.train <- read.csv("datasets/fire_data_clean.train.csv", 
+                                  stringsAsFactors = TRUE)
+fire_data_clean.test <- read.csv("datasets/fire_data_clean.test.csv", 
+                                 stringsAsFactors = TRUE)
 
 fire_data_clean.train$cong_dist <- as.factor(fire_data_clean.train$cong_dist)
 fire_data_clean.test$cong_dist <- as.factor(fire_data_clean.test$cong_dist)
@@ -90,8 +89,11 @@ cl_resp_min_fd.train$fast_response <- cl_resp_min_fd.train$inc_resp_min_qy < th_
 cl_resp_min_fd.test$fast_response <- cl_resp_min_fd.test$inc_resp_min_qy < th_irm
 
 # remove the future time differences
-cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(-c(emergency_min_qy, inc_resp_min_qy))
-cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(-c(emergency_min_qy, inc_resp_min_qy))
+cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(
+  -c(emergency_min_qy, inc_resp_min_qy))
+
+cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(
+  -c(emergency_min_qy, inc_resp_min_qy))
 
 dfSummary(cl_resp_min_fd.train$fast_response)
 dfSummary(cl_resp_min_fd.test$fast_response)
@@ -103,7 +105,8 @@ As expected we have an unbalanced case.
 Fit our full **Logistic Regression** model.
 
 ```{r}
-res_glm.full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, family = "binomial")
+res_glm.full <- glm(fast_response ~ ., data = cl_resp_min_fd.train, 
+                    family = "binomial")
 summary(res_glm.full)
 ```
 
@@ -142,7 +145,11 @@ AIC(res_glm.full, res_glm.clean) %>% arrange(AIC)
 Now we decide to update the previous model by adding an interaction term for each type of assigned units with the alarm source index.
 
 ```{r}
-res_glm.clean.inter <- update(res_glm.clean, . ~ . + al_source_desc : engines_assigned + al_source_desc : others_units_assigned + al_source_desc : ladders_assigned, data = cl_resp_min_fd.train)
+res_glm.clean.inter <- update(res_glm.clean, . ~ . +
+                                al_source_desc : engines_assigned +
+                                al_source_desc : others_units_assigned
+                              + al_source_desc : ladders_assigned,
+                              data = cl_resp_min_fd.train)
 summary(res_glm.clean.inter)
 ```
 
@@ -154,11 +161,16 @@ And by looking at the **AIC** we can say that this model is better than the init
 Now to have a complete comparison we decided to add also the interaction terms for the initial full model.
 
 ```{r}
-res_glm.full.inter <- update(res_glm.full, . ~ . + al_source_desc : engines_assigned + al_source_desc : others_units_assigned + al_source_desc : ladders_assigned, data = cl_resp_min_fd.train)
+res_glm.full.inter <- update(res_glm.full, . ~ . + 
+                               al_source_desc : engines_assigned +
+                               al_source_desc : others_units_assigned +
+                               al_source_desc : ladders_assigned, 
+                             data = cl_resp_min_fd.train)
 summary(res_glm.full.inter)
 ```
 ```{r}
-AIC(res_glm.full, res_glm.full.inter, res_glm.clean, res_glm.clean.inter) %>% arrange(AIC)
+AIC(res_glm.full, res_glm.full.inter, res_glm.clean, res_glm.clean.inter) %>% 
+  arrange(AIC)
 ```
 It seems like that the full model with the interaction terms outperform the other specified models, later we will see if this statements holds or not during predictions.
 
@@ -167,11 +179,15 @@ It seems like that the full model with the interaction terms outperform the othe
 Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
 
 ```{r}
-res_glm.full.pred <- predict(res_glm.full, newdata = cl_resp_min_fd.test, type = "response")
-res_glm.full.inter.pred <- predict(res_glm.full.inter, newdata = cl_resp_min_fd.test, type = "response")
+res_glm.full.pred <- predict(res_glm.full, newdata = cl_resp_min_fd.test, 
+                             type = "response")
+res_glm.full.inter.pred <- predict(res_glm.full.inter, 
+                              newdata = cl_resp_min_fd.test, type = "response")
 
-res_glm.clean.pred <- predict(res_glm.clean, newdata = cl_resp_min_fd.test, type = "response")
-res_glm.clean.inter.pred <- predict(res_glm.clean.inter, newdata = cl_resp_min_fd.test, type = "response")
+res_glm.clean.pred <- predict(res_glm.clean, newdata = cl_resp_min_fd.test, 
+                              type = "response")
+res_glm.clean.inter.pred <- predict(res_glm.clean.inter, 
+                              newdata = cl_resp_min_fd.test, type = "response")
 ```
 
 
@@ -181,11 +197,18 @@ At this point we use the `pROC` library in order to extrapolate the best thresho
 ```{r}
 par(mfrow=c(2,2))
 
-res_glm.full.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.full.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.full.pred ROC curve")
+res_glm.full.roc <- roc(
+  cl_resp_min_fd.test$fast_response ~ res_glm.full.pred, plot = TRUE, 
+  print.auc = TRUE, main = "res_glm.full.pred ROC curve")
 res_glm.full.inter.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.full.inter.pred, print.auc = TRUE, plot = TRUE, main = "res_glm.full.inter.pred ROC curve")
 
-res_glm.clean.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.clean.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
-res_glm.clean.inter.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.clean.inter.pred, print.auc = TRUE, plot = TRUE, main = "res_glm.clean.inter.pred ROC curve")
+res_glm.clean.roc <- roc(
+  cl_resp_min_fd.test$fast_response ~ res_glm.clean.pred, plot = TRUE
+  , print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
+
+res_glm.clean.inter.roc <- roc(
+  cl_resp_min_fd.test$fast_response ~ res_glm.clean.inter.pred, 
+  print.auc = TRUE, plot = TRUE, main = "res_glm.clean.inter.pred ROC curve")
 ```
 By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
 
@@ -193,10 +216,12 @@ Now we extract from each results the best curve measure to perform a deeper anal
 
 ```{r}
 res_glm.full.roc.bmetrics <- coords(res_glm.full.roc, x = "best", ret = "all")
-res_glm.full.inter.roc.bmetrics <- coords(res_glm.full.inter.roc, x = "best", ret = "all")
+res_glm.full.inter.roc.bmetrics <- coords(res_glm.full.inter.roc, x = "best",
+                                          ret = "all")
 
 res_glm.clean.roc.bmetrics <- coords(res_glm.clean.roc, x = "best", ret = "all")
-res_glm.clean.inter.roc.bmetrics <- coords(res_glm.clean.inter.roc, x = "best", ret = "all")
+res_glm.clean.inter.roc.bmetrics <- coords(res_glm.clean.inter.roc, x = "best",
+                                           ret = "all")
 ```
 
 Rename the single row for each dataframe and concatenate all in a single one.
@@ -207,7 +232,8 @@ row.names(res_glm.full.inter.roc.bmetrics) <- "Interaction Full Model"
 row.names(res_glm.clean.roc.bmetrics) <- "Cleaned Model"
 row.names(res_glm.clean.inter.roc.bmetrics) <- "Interaction Cleaned Model"
 
-res_results <- rbind(res_glm.full.roc.bmetrics, res_glm.full.inter.roc.bmetrics, res_glm.clean.roc.bmetrics, res_glm.clean.inter.roc.bmetrics)
+res_results <- rbind(res_glm.full.roc.bmetrics, res_glm.full.inter.roc.bmetrics,
+                  res_glm.clean.roc.bmetrics, res_glm.clean.inter.roc.bmetrics)
 ```
 
 
@@ -245,22 +271,26 @@ Let's have a quick look on the confusion matrix for the four model that we have 
 
 1- **Full Model**
 ```{r}
-table(preds=(res_glm.full.pred > res_glm.full.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+table(preds=(res_glm.full.pred > res_glm.full.roc.bmetrics$threshold), 
+      true=as.logical(cl_resp_min_fd.test$fast_response))
 ```
 
 2- **Interaction Full Model**
 ```{r}
-table(preds=(res_glm.full.inter.pred > res_glm.full.inter.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+table(preds=(res_glm.full.inter.pred > res_glm.full.inter.roc.bmetrics$threshold),
+      true=as.logical(cl_resp_min_fd.test$fast_response))
 ```
 
 3- **Cleaned Model**
 ```{r}
-table(preds=(res_glm.clean.pred > res_glm.clean.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+table(preds=(res_glm.clean.pred > res_glm.clean.roc.bmetrics$threshold), 
+      true=as.logical(cl_resp_min_fd.test$fast_response))
 ```
 
 4- **Interaction Cleaned Model**
 ```{r}
-table(preds=(res_glm.clean.inter.pred > res_glm.clean.inter.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+table(preds=(res_glm.clean.inter.pred > res_glm.clean.inter.roc.bmetrics$threshold),
+      true=as.logical(cl_resp_min_fd.test$fast_response))
 ```
 
 
@@ -275,24 +305,28 @@ summary(res_glm.full.inter)
 
 We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `working_hour`.
 ```{r}
-plot( effect("inc_borough", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+plot( effect("inc_borough", res_glm.full.inter), rescale.axis = FALSE, 
+      ylab = "Probability of Fast Response")
 ```
 
 The lower probability of having a fast response is for The Bronx, whereas the higher are in the borough of Brooklyn and Staten Island.
 
 ```{r}
-plot(effect("inc_class_group", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+plot(effect("inc_class_group", res_glm.full.inter), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Response")
 ```
 As expected we have higher probability to have a fast response for the **Fire** and **NonFire Emergencies** incident and lower for **Medical Emergencies** and **Medical MFAs**. 
 
 
 ```{r}
-plot(effect("others_units_assigned", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+plot(effect("others_units_assigned", res_glm.full.inter), rescale.axis = FALSE,
+     ylab = "Probability of Fast Response")
 ```
 INterestingly we can see that the **others_units_assigned** follow a logarithmic curve. 
 
 ```{r}
-plot(effect("working_hour", res_glm.full.inter), rescale.axis = FALSE, ylab = "Probability of Fast Response")
+plot(effect("working_hour", res_glm.full.inter), rescale.axis = FALSE,
+     ylab = "Probability of Fast Response")
 ```
 
 And we have an higher probability to have a fast response for the working hour.
@@ -352,12 +386,14 @@ abline(v = log(res_bestlam.ridge), lwd = 1.2, lty = "dashed")
 We make the prediction on the test set.
 
 ```{r}
-res_fit.ridge.pred <- predict(res_fit.ridge, s = res_bestlam.ridge, newx = x_test, type = "response")
+res_fit.ridge.pred <- predict(res_fit.ridge, s = res_bestlam.ridge, 
+                              newx = x_test, type = "response")
 ```
 
 Apply the `roc` function in order to get the best threshold value.
 ```{r}
-res_fit.ridge.roc <- roc(y_test ~ res_fit.ridge.pred, plot = TRUE, print.auc = TRUE) 
+res_fit.ridge.roc <- roc(y_test ~ res_fit.ridge.pred, plot = TRUE,
+                         print.auc = TRUE) 
 ```
 
 See the results
@@ -418,12 +454,14 @@ abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
 
 Now we apply prediction on the test set.
 ```{r}
-res_fit.lasso.pred <- predict(res_fit.lasso, s = res_bestlam.lasso, newx = x_test, type = "response")
+res_fit.lasso.pred <- predict(res_fit.lasso, s = res_bestlam.lasso, 
+                              newx = x_test, type = "response")
 ```
 
 Then we apply the `roc` function to obtain the best threshold value.
 ```{r}
-res_fit.lasso.roc <- roc(y_test ~ res_fit.lasso.pred, plot = TRUE, print.auc = TRUE) 
+res_fit.lasso.roc <- roc(y_test ~ res_fit.lasso.pred, plot = TRUE, 
+                         print.auc = TRUE) 
 ```
 
 See the result.
@@ -465,19 +503,23 @@ The a-priori probabilities correspond to the sample proportion of fast response 
 
 An example of group mean is the mean average probability that an incident happen in the borough of Brooklyn having a fast response time.
 ```{r}
-with(cl_resp_min_fd.train, mean(inc_borough[fast_response == TRUE] == "Brooklyn"))
+with(cl_resp_min_fd.train, 
+     mean(inc_borough[fast_response == TRUE] == "Brooklyn"))
 ```
 
 
 Now we make the prediction on the test set.
 ```{r}
-res_lda.preds <- predict(res_lda.fit, newdata = cl_resp_min_fd.test, type = "response")
+res_lda.preds <- predict(res_lda.fit, 
+                         newdata = cl_resp_min_fd.test, type = "response")
 ```
 
 
 The ROC curve for linear discriminant analysis is:
 ```{r}
-res_lda.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+res_lda.roc <- roc(
+  cl_resp_min_fd.test$fast_response ~ res_lda.preds$posterior[, 2], 
+  plot = TRUE, print.auc = TRUE)
 ```
 The best choice for the threshold of linear discriminant analysis yields an accuracy of:
 ```{r}
@@ -521,7 +563,8 @@ The a-priori probabilities again correspond to the sample proportion of fast res
 
 An example of group mean is the mean average probability that an incident happen in the evening having a slow response time.
 ```{r}
-with(cl_resp_min_fd.train, mean(time_of_day[fast_response == FALSE] == "Evening"))
+with(cl_resp_min_fd.train, 
+     mean(time_of_day[fast_response == FALSE] == "Evening"))
 ```
 
 
@@ -533,13 +576,16 @@ table(preds = res_nb.preds, true = cl_resp_min_fd.test$fast_response)
 
 Predicted class probabilities can be obtained using the argument **type = "raw"**:
 ```{r}
-res_nb.posterior <- predict(res_nb.fit, newdata = cl_resp_min_fd.test, type = "raw")
+res_nb.posterior <- predict(res_nb.fit,
+                            newdata = cl_resp_min_fd.test, type = "raw")
 head(res_nb.posterior)
 ```
 
 ROC curve:
 ```{r}
-res_nb.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+res_nb.roc <- roc(
+  cl_resp_min_fd.test$fast_response ~ res_nb.posterior[, 2],
+  plot = TRUE, print.auc = TRUE)
 ```
 
 ```{r}
@@ -549,7 +595,8 @@ res_nb.roc.bmetrics
 
 See the confusion matrix using the best threshold value.
 ```{r}
-table(preds=(res_nb.posterior[, 2] > res_nb.roc.bmetrics$threshold), true=as.logical(cl_resp_min_fd.test$fast_response))
+table(preds=(res_nb.posterior[, 2] > res_nb.roc.bmetrics$threshold), 
+      true=as.logical(cl_resp_min_fd.test$fast_response))
 ```
 
 ```{r}
@@ -626,7 +673,8 @@ cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy))
 Fit our full **Logistic Regression** model.
 
 ```{r}
-eme_glm.full <- glm(fast_emergency ~ ., data = cl_emerg_min_fd.train, family = "binomial")
+eme_glm.full <- glm(fast_emergency ~ ., data = cl_emerg_min_fd.train, 
+                    family = "binomial")
 summary(eme_glm.full)
 ```
 
@@ -649,7 +697,9 @@ vif(eme_glm.full)
 ```
 
 ```{r}
-eme_glm.clean <- update(eme_glm.full, . ~ . - cong_dist - highest_al_level - inc_class_group - day_type - working_hour, data = cl_emerg_min_fd.train)
+eme_glm.clean <- update(eme_glm.full, . ~ . - cong_dist - highest_al_level - 
+                          inc_class_group - day_type - working_hour, 
+                        data = cl_emerg_min_fd.train)
 vif(eme_glm.clean)
 ```
 
@@ -672,8 +722,10 @@ We have tried many interaction terms and scaling predictors but all the edits of
 Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
 
 ```{r}
-eme_glm.full.pred <- predict(eme_glm.full, newdata = cl_emerg_min_fd.test, type = "response")
-eme_glm.clean.pred <- predict(eme_glm.clean, newdata = cl_emerg_min_fd.test, type = "response")
+eme_glm.full.pred <- predict(eme_glm.full, newdata = cl_emerg_min_fd.test, 
+                             type = "response")
+eme_glm.clean.pred <- predict(eme_glm.clean, newdata = cl_emerg_min_fd.test, 
+                              type = "response")
 ```
 
 
@@ -683,8 +735,13 @@ At this point we use the `pROC` library in order to extrapolate the best thresho
 ```{r}
 par(mfrow=c(1,2))
 
-eme_glm.full.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_glm.full.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.full.pred ROC curve")
-eme_glm.clean.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_glm.clean.pred, plot = TRUE, print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
+eme_glm.full.roc <- roc(
+  cl_emerg_min_fd.test$fast_emergency ~ eme_glm.full.pred, plot = TRUE,
+  print.auc = TRUE, main = "res_glm.full.pred ROC curve")
+
+eme_glm.clean.roc <- roc(
+  cl_emerg_min_fd.test$fast_emergency ~ eme_glm.clean.pred, plot = TRUE, 
+  print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
 ```
 By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
 
@@ -738,12 +795,14 @@ Let's have a quick look on the confusion matrix for the four model that we have 
 
 1- **Full Model**
 ```{r}
-table(preds=(eme_glm.full.pred > eme_glm.full.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+table(preds=(eme_glm.full.pred > eme_glm.full.roc.bmetrics$threshold), 
+      true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
 2- **Cleaned Model**
 ```{r}
-table(preds=(eme_glm.clean.pred > eme_glm.clean.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+table(preds=(eme_glm.clean.pred > eme_glm.clean.roc.bmetrics$threshold), 
+      true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
 
@@ -759,25 +818,29 @@ summary(eme_glm.full)
 
 We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `inc_resp_min_qy`.
 ```{r}
-plot(effect("inc_borough", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+plot(effect("inc_borough", eme_glm.full), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
 ```
 
 The lower probability of having a fast emergency is for The Bronx but with an high confidence interval, whereas the higher is in the borough of Brooklyn and Staten Island, with the latter having a smaller interval respect to the former.
 
 ```{r}
-plot(effect("inc_class_group", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+plot(effect("inc_class_group", eme_glm.full), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
 ```
 
 As expected we have a lower probability to have a fast emergency for the and **NonFire Emergencies** and **Medical Emergencies**. On the other hand we have the higher probability of having a fast emergency for the **Medical MFAs** even if there is a big confidence interval.
 
 
 ```{r}
-plot(effect("others_units_assigned", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+plot(effect("others_units_assigned", eme_glm.full), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
 ```
 As expected the probability of having a fast emergency is higher having few others units assigned to the incident.
 
 ```{r}
-plot(effect("inc_resp_min_qy", eme_glm.full), rescale.axis = FALSE, ylab = "Probability of Fast Emergency")
+plot(effect("inc_resp_min_qy", eme_glm.full), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
 ```
 
 As expected having a quick response time is much likely to have higher probability of fast emergency.
@@ -841,12 +904,14 @@ abline(v = log(eme_bestlam.ridge), lwd = 1.2, lty = "dashed")
 We make the prediction on the test set.
 
 ```{r}
-eme_fit.ridge.pred <- predict(eme_fit.ridge, s = eme_bestlam.ridge, newx = x_test, type = "response")
+eme_fit.ridge.pred <- predict(eme_fit.ridge, s = eme_bestlam.ridge, 
+                              newx = x_test, type = "response")
 ```
 
 Apply the `roc` function in order to get the best threshold value.
 ```{r}
-eme_fit.ridge.roc <- roc(y_test ~ eme_fit.ridge.pred, plot = TRUE, print.auc = TRUE) 
+eme_fit.ridge.roc <- roc(y_test ~ eme_fit.ridge.pred, plot = TRUE,
+                         print.auc = TRUE) 
 ```
 
 See the results
@@ -907,12 +972,14 @@ abline(v = log(eme_bestlam.lasso), lwd = 1.2, lty = "dashed")
 
 Now we apply prediction on the test set.
 ```{r}
-eme_fit.lasso.pred <- predict(eme_fit.lasso, s = eme_bestlam.lasso, newx = x_test, type = "response")
+eme_fit.lasso.pred <- predict(eme_fit.lasso, s = eme_bestlam.lasso, 
+                              newx = x_test, type = "response")
 ```
 
 Then we apply the `roc` function to obtain the best threshold value.
 ```{r}
-eme_fit.lasso.roc <- roc(y_test ~ eme_fit.lasso.pred, plot = TRUE, print.auc = TRUE) 
+eme_fit.lasso.roc <- roc(y_test ~ eme_fit.lasso.pred, plot = TRUE, 
+                         print.auc = TRUE) 
 ```
 
 See the result.
@@ -955,13 +1022,16 @@ with(cl_emerg_min_fd.train, mean(inc_resp_min_qy[fast_emergency == TRUE]))
 
 Now we make the prediction on the test set.
 ```{r}
-eme_lda.preds <- predict(eme_lda.fit, newdata = cl_emerg_min_fd.test, type = "response")
+eme_lda.preds <- predict(eme_lda.fit, newdata = cl_emerg_min_fd.test, 
+                         type = "response")
 ```
 
 
 The ROC curve for linear discriminant analysis is:
 ```{r}
-eme_lda.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_lda.preds$posterior[, 2], plot = TRUE, print.auc = TRUE)
+eme_lda.roc <- roc(
+  cl_emerg_min_fd.test$fast_emergency ~ eme_lda.preds$posterior[, 2],
+  plot = TRUE, print.auc = TRUE)
 ```
 The best choice for the threshold of linear discriminant analysis yields an accuracy of:
 ```{r}
@@ -971,7 +1041,8 @@ eme_lda.roc.bmetrics
 
 See the confusion matrix using the best threshold value.
 ```{r}
-table(preds=(eme_lda.preds$posterior[, 2] > eme_lda.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+table(preds=(eme_lda.preds$posterior[, 2] > eme_lda.roc.bmetrics$threshold), 
+      true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
 Concatenate with the other results.
@@ -1008,13 +1079,15 @@ table(preds = eme_nb.preds, true = cl_emerg_min_fd.test$fast_emergency)
 
 Predicted class probabilities can be obtained using the argument **type = "raw"**:
 ```{r}
-eme_nb.posterior <- predict(eme_nb.fit, newdata = cl_emerg_min_fd.test, type = "raw")
+eme_nb.posterior <- predict(eme_nb.fit, newdata = cl_emerg_min_fd.test,
+                            type = "raw")
 head(eme_nb.posterior)
 ```
 
 ROC curve:
 ```{r}
-eme_nb.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_nb.posterior[, 2], plot = TRUE, print.auc = TRUE)
+eme_nb.roc <- roc(cl_emerg_min_fd.test$fast_emergency ~ eme_nb.posterior[, 2], 
+                  plot = TRUE, print.auc = TRUE)
 ```
 
 ```{r}
@@ -1024,7 +1097,8 @@ eme_nb.roc.bmetrics
 
 See the confusion matrix using the best threshold value.
 ```{r}
-table(preds=(eme_nb.posterior[, 2] > eme_nb.roc.bmetrics$threshold), true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+table(preds=(eme_nb.posterior[, 2] > eme_nb.roc.bmetrics$threshold), 
+      true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
 ```{r}
