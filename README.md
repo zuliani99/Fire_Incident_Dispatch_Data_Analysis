@@ -58,7 +58,7 @@ In both analyses we tried to use a **linear regression** model, however we will 
 If you want to execute the **.Rmd** file remember to change the working directory with the corresponding path.
 
 
-## Analysis Subsivision
+## Analysis Subdivision
 
 1. **Part 1 - Dataset Analysis and Cleaning**: here we explore and cleand the dataset
 2. **Part 2 - Linear Regreasion**: we try to fit a linear regression model
