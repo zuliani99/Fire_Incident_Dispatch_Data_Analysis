@@ -54,6 +54,9 @@ We will try to create two different analyses.
 
 In both analyses we tried to use a **linear regression** model, however we will see that the assumptions for applying the linear regression are not met, thus we will simplify our project moving into **classification**, dividing in two or more ranges the two responses. In addition to this we will perform data exploration and cleaning, studying the presence or not of patterns of NA values and invalid values.
 
+## Note
+If you want to execute the **.Rmd** file remember to change the working directory with the corresponding path.
+
 
 ## Analysis Subsivision
 
