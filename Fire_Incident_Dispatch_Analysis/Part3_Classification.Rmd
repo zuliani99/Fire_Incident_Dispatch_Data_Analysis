@@ -34,7 +34,7 @@ for (req in requirements){
 ```
 
 
-# Cast the anaysis to a Calssification task
+# Cast to a ClassificationTtask
 
 As mentioned before, we decided, as the professor suggested, to cast our regression problem into a classification problem by dividing the range of possible time difference responses into 2 for a binary classification or more than 2 for a multi-classification task.
 
@@ -78,7 +78,7 @@ th_eme <- summary(fire_data_clean$emergency_min_qy)[5]
 ```
 
 
-# Use the range of inc_resp_min_qy as response
+# Range of inc_resp_min_qy as response
 
 ```{r}
 # make a copy of the train and test
@@ -95,11 +95,33 @@ cl_resp_min_fd.train <- cl_resp_min_fd.train %>% select(
 
 cl_resp_min_fd.test <- cl_resp_min_fd.test %>% select(
   -c(emergency_min_qy, inc_resp_min_qy))
-
-dfSummary(cl_resp_min_fd.train$fast_response)
-dfSummary(cl_resp_min_fd.test$fast_response)
 ```
-As expected we have an unbalanced case.
+
+
+See the summary of both train and test response.
+```{r}
+print(dfSummary(cl_resp_min_fd.train$fast_response, 
+                plain.ascii  = FALSE, 
+                style        = "multiline", 
+                headings     = FALSE,
+                graph.magnif = 0.8, 
+                valid.col    = FALSE,
+                na.col       = FALSE),
+                method = 'render')
+```
+
+```{r}
+print(dfSummary(cl_resp_min_fd.test$fast_response, 
+                plain.ascii  = FALSE, 
+                style        = "multiline", 
+                headings     = FALSE,
+                graph.magnif = 0.8, 
+                valid.col    = FALSE,
+                na.col       = FALSE),
+                method = 'render')
+```
+
+As expected we have an unbalanced case, since exactly 3/4 of the train and test dataset have a fast response, whereas the rest has a low response.
 
 ## Logistic Regression
 
@@ -113,12 +135,12 @@ summary(res_glm.full)
 
 So by the summary we can say that:
 
-- **inc_borough** is strongly significant for Staten Island and Manhattan
-- **cong_dist** is significant for the congressional district 5 and 12
-- **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**
-- Interestingly the **inc_class_group** is strongly significant only for the fire incident
-- **al_source_desc** and **al_index_desc** have all categorical predictors poorly or slightly statistically significant
-- **working_hour**,  **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant 
+- **inc_borough** is strongly significant for Staten Island and Manhattan and heavily significant for Queens.
+- **cong_dist** is strongly significant for the congressional district 5 and 12, whereas it is slightly significant for 14 and 16.
+- **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**.
+- Interestingly the **inc_class_group** is strongly significant only for the structural and non structural fires.
+- **al_source_desc** and **al_index_desc** have all categorical predictors poorly or slightly statistically significant.
+- **working_hour**,  **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant .
 
 
 Let's check if we have some **multicollinearity** problem using the `vif` function as we did on the previous analysis part.
@@ -127,8 +149,10 @@ Let's check if we have some **multicollinearity** problem using the `vif` functi
 vif(res_glm.full)
 ```
 
+And update the model removing the predictors that are explained with a linear combination of others predictors. We name this new model the cleaned one since it will contain only the significant predictors.
+
 ```{r}
-res_glm.clean <- update(res_glm.full, . ~ . - cong_dist - highest_al_level - inc_class_group, data = cl_resp_min_fd.train)
+res_glm.clean <- update(res_glm.full, . ~ . - cong_dist - highest_al_level - inc_class_group - ladders_assigned , data = cl_resp_min_fd.train)
 vif(res_glm.clean)
 ```
 
@@ -143,29 +167,43 @@ AIC(res_glm.full, res_glm.clean) %>% arrange(AIC)
 
 
 
-Now we decide to update the previous model by adding an interaction term for each type of assigned units with the alarm source index.
+Now we decide to update the previous model by adding the following interaction terms:
+
+- `al_source_desc : engines_assigned`
+- `al_source_desc : others_units_assigned`
+- `day_type : working_hour`
+- `time_of_day : tua_is_one`
 
 ```{r}
 res_glm.clean.inter <- update(res_glm.clean, . ~ . +
                                 al_source_desc : engines_assigned +
-                                al_source_desc : others_units_assigned
-                              + al_source_desc : ladders_assigned,
+                                al_source_desc : others_units_assigned +
+                                day_type : working_hour +
+                                time_of_day : tua_is_one,
                               data = cl_resp_min_fd.train)
 summary(res_glm.clean.inter)
 ```
+
+So we note that:
+
+- The interaction between `al_source_desc` and `engines_assigned` is strongly significant for all the cases.
+- `al_source_desc` between `others_units_assigned ` is significant for many cases but for others like.
+- `time_of_day` between `tua_is_one` is significant except for the morning category.
+- `day_type` between `working_hour` is strongly significant.
 
 ```{r}
 AIC(res_glm.full, res_glm.clean, res_glm.clean.inter) %>% arrange(AIC)
 ```
 And by looking at the **AIC** we can say that this model is better than the initial full model.
 
-Now to have a complete comparison we decided to add also the interaction terms for the initial full model.
+Now to have a complete comparison we decided to add the same interaction terms to the initial full model.
 
 ```{r}
 res_glm.full.inter <- update(res_glm.full, . ~ . + 
                                al_source_desc : engines_assigned +
                                al_source_desc : others_units_assigned +
-                               al_source_desc : ladders_assigned, 
+                               day_type : working_hour +
+                               time_of_day : tua_is_one, 
                              data = cl_resp_min_fd.train)
 summary(res_glm.full.inter)
 ```
@@ -175,18 +213,69 @@ AIC(res_glm.full, res_glm.full.inter, res_glm.clean, res_glm.clean.inter) %>%
 ```
 It seems like that the full model with the interaction terms outperform the other specified models, later we will see if this statements holds or not during predictions.
 
-## Logistic Regression Model Comparison
+### Model Interpretation
+
+We decide to interpret the model with the lower AIC, so the **res_glm.full.inter** which has ```r AIC(res_glm.full.inter)``` as AIC.
+
+For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
+```{r}
+summary(res_glm.full.inter)
+```
+
+We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `al_source_desc`.
+```{r}
+plot( effect("inc_borough", res_glm.full.inter), rescale.axis = FALSE, 
+      ylab = "Probability of Fast Response")
+```
+
+The lower probability of having a fast response is for The Bronx, whereas the higher are in the borough of Brooklyn and Staten Island.
+
+```{r}
+plot(effect("inc_class_group", res_glm.full.inter), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Response")
+```
+
+As expected we have higher probability to have a fast response for the **Fire** and **NonFire Emergencies** incident and lower for **Medical Emergencies** and **Medical MFAs**. 
+
+
+```{r}
+plot(effect("others_units_assigned", res_glm.full.inter), rescale.axis = FALSE,
+     ylab = "Probability of Fast Response")
+```
+
+Interestingly we can see that the **others_units_assigned** follow a logarithmic curve. 
+
+```{r}
+plot(effect("al_source_desc", res_glm.full.inter), rescale.axis = FALSE,
+     ylab = "Probability of Fast Response")
+```
+
+We can see that there is an higher probability of having a fast response if the incident has origin from the **Others** category, the one that we used to merge the categries that have low frequency. Whereas the lower probability respect the possible case of have a fast response is from the **Phone** category.
+
+
+Let's the effect from a the interaction of `time_of_day` and `tua_is_one`.
+
+```{r}
+plot(effect("time_of_day:tua_is_one", res_glm.full.inter), rescale.axis=FALSE, ylab="Probability of Fast Response")
+```
+
+We can see that in the case of having more than a single units assigned we have an higher probability in the Evening of having a fast response, similarly n the case of having a single assigned units. Interestingly we can see that the two line plots are pretty similar, they are only vertically scaled.
+
+
+## Model Comparison
 
 Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
 
 ```{r}
 res_glm.full.pred <- predict(res_glm.full, newdata = cl_resp_min_fd.test, 
                              type = "response")
+
 res_glm.full.inter.pred <- predict(res_glm.full.inter, 
                               newdata = cl_resp_min_fd.test, type = "response")
 
 res_glm.clean.pred <- predict(res_glm.clean, newdata = cl_resp_min_fd.test, 
                               type = "response")
+
 res_glm.clean.inter.pred <- predict(res_glm.clean.inter, 
                               newdata = cl_resp_min_fd.test, type = "response")
 ```
@@ -201,7 +290,10 @@ par(mfrow=c(2,2))
 res_glm.full.roc <- roc(
   cl_resp_min_fd.test$fast_response ~ res_glm.full.pred, plot = TRUE, 
   print.auc = TRUE, main = "res_glm.full.pred ROC curve")
-res_glm.full.inter.roc <- roc(cl_resp_min_fd.test$fast_response ~ res_glm.full.inter.pred, print.auc = TRUE, plot = TRUE, main = "res_glm.full.inter.pred ROC curve")
+
+res_glm.full.inter.roc <- roc(
+  cl_resp_min_fd.test$fast_response ~ res_glm.full.inter.pred, print.auc = TRUE,
+  plot = TRUE, main = "res_glm.full.inter.pred ROC curve")
 
 res_glm.clean.roc <- roc(
   cl_resp_min_fd.test$fast_response ~ res_glm.clean.pred, plot = TRUE
@@ -211,16 +303,19 @@ res_glm.clean.inter.roc <- roc(
   cl_resp_min_fd.test$fast_response ~ res_glm.clean.inter.pred, 
   print.auc = TRUE, plot = TRUE, main = "res_glm.clean.inter.pred ROC curve")
 ```
+
 By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
 
 Now we extract from each results the best curve measure to perform a deeper analysis.
 
 ```{r}
 res_glm.full.roc.bmetrics <- coords(res_glm.full.roc, x = "best", ret = "all")
+
 res_glm.full.inter.roc.bmetrics <- coords(res_glm.full.inter.roc, x = "best",
                                           ret = "all")
 
 res_glm.clean.roc.bmetrics <- coords(res_glm.clean.roc, x = "best", ret = "all")
+
 res_glm.clean.inter.roc.bmetrics <- coords(res_glm.clean.inter.roc, x = "best",
                                            ret = "all")
 ```
@@ -228,9 +323,11 @@ res_glm.clean.inter.roc.bmetrics <- coords(res_glm.clean.inter.roc, x = "best",
 Rename the single row for each dataframe and concatenate all in a single one.
 ```{r}
 row.names(res_glm.full.roc.bmetrics) <- "Full Model"
+
 row.names(res_glm.full.inter.roc.bmetrics) <- "Interaction Full Model"
 
 row.names(res_glm.clean.roc.bmetrics) <- "Cleaned Model"
+
 row.names(res_glm.clean.inter.roc.bmetrics) <- "Interaction Cleaned Model"
 
 res_results <- rbind(res_glm.full.roc.bmetrics, res_glm.full.inter.roc.bmetrics,
@@ -260,13 +357,7 @@ res_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
 And finally for the accuracy measure the best model is the **Full Model**.
 
-Howver we recall that we have an unbalanced case for the respnse, since:
-
-```{r}
-dfSummary(cl_resp_min_fd.test[,"fast_response"])
-```
-
-Exactly 3/4 of the test dataset have a fast response, whereas the rest has a low response. For this reason model choice should happen on the model that is able to correctly classify the response time of an incident, thus we choose the **Full Model** since it has the higher accuracy and sensitivity.
+However we recall that we have an unbalanced case and for this reason model choice should happen on the one that is able to correctly classify the response time of an incident, thus we choose the **Full Model** since it has the highest sensitivity and specificity is not soo bad.
 
 Let's have a quick look on the confusion matrix for the four model that we have specified.
 
@@ -295,50 +386,14 @@ table(preds=(res_glm.clean.inter.pred > res_glm.clean.inter.roc.bmetrics$thresho
 ```
 
 
-## Logistic Regression Model Interpretation
-
-We decide to interpret the model with the lower AIC, so the **res_glm.full.inter** which has ```r AIC(res_glm.full.inter)``` as AIC.
-
-For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
-```{r}
-summary(res_glm.full.inter)
-```
-
-We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `working_hour`.
-```{r}
-plot( effect("inc_borough", res_glm.full.inter), rescale.axis = FALSE, 
-      ylab = "Probability of Fast Response")
-```
-
-The lower probability of having a fast response is for The Bronx, whereas the higher are in the borough of Brooklyn and Staten Island.
-
-```{r}
-plot(effect("inc_class_group", res_glm.full.inter), rescale.axis = FALSE, 
-     ylab = "Probability of Fast Response")
-```
-As expected we have higher probability to have a fast response for the **Fire** and **NonFire Emergencies** incident and lower for **Medical Emergencies** and **Medical MFAs**. 
-
-
-```{r}
-plot(effect("others_units_assigned", res_glm.full.inter), rescale.axis = FALSE,
-     ylab = "Probability of Fast Response")
-```
-INterestingly we can see that the **others_units_assigned** follow a logarithmic curve. 
-
-```{r}
-plot(effect("working_hour", res_glm.full.inter), rescale.axis = FALSE,
-     ylab = "Probability of Fast Response")
-```
-
-And we have an higher probability to have a fast response for the working hour.
-
-
 Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
 
 ## Ridge Shrinkage Estimation
 We decide to use the full model with interaction terms in order to see how ridge is able to shrinkage the coefficients.
 
-First of all we have to create our model matrices.
+We recall that the penalty on ridge is put in the sum of square of the coefficients thus to shrinkage the model coefficient toward zero by the parameter $\lambda$.
+
+So first of all we have to create our model matrices.
 ```{r}
 # model matrix for train
 x_train <- model.matrix(formula(res_glm.full.inter), data = cl_resp_min_fd.train)
@@ -351,12 +406,11 @@ y_test <- cl_resp_min_fd.test$fast_response
 
 
 
-
-
 ```{r}
 res_fit.ridge <- glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
 plot(res_fit.ridge, xvar = "lambda", label = TRUE)
 ```
+
 Choose the best value of lambda via cross-validation.
 ```{r}
 res_cv.ridge <- cv.glmnet(x_train, y_train, familiy = "binomial", alpha = 0)
@@ -364,12 +418,11 @@ plot(res_cv.ridge)
 ```
 
 
-The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
+The value of $\lambda$ that minimises the ridge cross-validated mean square error is:
 
 ```{r}
 res_cv.ridge$lambda.min
 ```
-
 
 However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
 
@@ -422,6 +475,8 @@ res_results <- rbind(res_results, res_fit.ridge.roc.bmetrics)
 
 Now is the turn of lasso and we decide to use again the full model with interaction for the same reason of ridge.
 
+In Lasso instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients.
+
 ```{r}
 res_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
 plot(res_fit.lasso)
@@ -450,6 +505,14 @@ Like before, now visualize again the lasso estimates as a function of the logari
 ```{r }
 plot(res_fit.lasso, xvar = "lambda")
 abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+
+The remaining non zero coefficient from the model obtained with the lambda taken 1se after are:
+```{r}
+res_lasso.1se.coef <- coef(res_fit.lasso, res_bestlam.lasso)
+
+res_lasso.1se.coef[res_lasso.1se.coef[,1]!=0,]
 ```
 
 
@@ -635,11 +698,12 @@ res_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
 Finally regarding the accuracy measure the best model is again the **Full Model**.
 
+
 In conclusion for this analysis we have seen that more or less all the model that we have tried have similar performance and interestingly the initial model that we have specified is the one that better solve our prediction task of trying to predict if a given incident call has a fast or low response time.
+However recalling the unbalanced problem our choice could be assigned to both:
 
-
-
-
+- **Full Model** since it has the highest accuracy at equal merit with the Naive Bayes, it is second overall regarding the sensitivity even if is the penultimate on specificity but it is not worse than random choice.
+- **Naive Bayes** since has the same accuracy but it has the best sensitivity and worst specificity.
 
 
 
@@ -665,6 +729,28 @@ cl_emerg_min_fd.test <- cl_emerg_min_fd.test %>% select(-c(emergency_min_qy))
 ```
 
 
+See the summary of both train and test response.
+```{r}
+print(dfSummary(cl_emerg_min_fd.test$fast_emergency, 
+                plain.ascii  = FALSE, 
+                style        = "multiline", 
+                headings     = FALSE,
+                graph.magnif = 0.8, 
+                valid.col    = FALSE,
+                na.col       = FALSE),
+                method = 'render')
+```
+
+```{r}
+print(dfSummary(cl_emerg_min_fd.test$fast_emergency, 
+                plain.ascii  = FALSE, 
+                style        = "multiline", 
+                headings     = FALSE,
+                graph.magnif = 0.8, 
+                valid.col    = FALSE,
+                na.col       = FALSE),
+                method = 'render')
+```
 
 
 
@@ -681,13 +767,14 @@ summary(eme_glm.full)
 
 So by the summary we can say that:
 
-- **inc_borough** is strongly significant for Manhattan
-- **cong_dist** is high significant for the congressional district 13
-- **al_source_desc** are all strongly significant
+- **inc_borough** is strongly significant except for Manhattan
+- **cong_dist** is highly significant only for the congressional district 13
+- **al_source_desc** are all very strongly significant
 - **al_index_desc** is strongly significant only for the categorical value *Initial Alarm*
 - **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**
 - **inc_class_group** is strongly significant for about every categorical value
-- Differently from the previous anaysis **working_hour** is not significant
+- **inc_resp_min_qy** is strongly significant
+- Differently from the previous analysis **working_hour** is not significant
 - **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant 
 
 
@@ -696,6 +783,8 @@ Let's check if we have some **multicollinearity** problem using the `vif` functi
 ```{r}
 vif(eme_glm.full)
 ```
+
+Now we remove already the non significant predictor building as before the cleaned model.
 
 ```{r}
 eme_glm.clean <- update(eme_glm.full, . ~ . - cong_dist - highest_al_level - 
@@ -714,18 +803,97 @@ AIC(eme_glm.full, eme_glm.clean) %>% arrange(AIC)
 ```
 
 
-We have tried many interaction terms and scaling predictors but all the edits of the previous model ends up having an AIC worse respect to the cleaned model, thus we decide to stop here and continue with the prediction and comparison step of the thwo specified models.
+Now we decide to update the previous model by adding an interaction term for each type of assigned units with the alarm source description.
+
+```{r}
+eme_glm.clean.inter <- update(eme_glm.clean, . ~ . +
+                                al_source_desc : engines_assigned +
+                                al_source_desc : others_units_assigned +
+                                al_source_desc : ladders_assigned,
+                              data = cl_emerg_min_fd.train)
+summary(eme_glm.clean.inter)
+```
+
+```{r}
+AIC(eme_glm.full, eme_glm.clean, eme_glm.clean.inter) %>% arrange(AIC)
+```
+
+By looking at the AIC the best model remain the initial full model.
+
+Now to have a complete comparison we decided to add the same interaction terms to the initial full model.
+
+```{r}
+eme_glm.full.inter <- update(eme_glm.full, . ~ . + 
+                               al_source_desc : engines_assigned +
+                               al_source_desc : others_units_assigned +
+                               al_source_desc : ladders_assigned,
+                             data = cl_emerg_min_fd.train)
+summary(eme_glm.full.inter)
+```
 
 
+```{r}
+AIC(eme_glm.full, eme_glm.full.inter, eme_glm.clean, eme_glm.clean.inter) %>% arrange(AIC)
+```
 
-## Logistic Regression Model Comparison
+And it seems like that the full model with the interactionit is just slightly better respect to the full model without interaction terms.
+
+
+## Model Interpretation
+
+We decide to interpret the model with the lower AIC, so the **eme_glm.full.inter** which has ```r AIC(eme_glm.full.inter)``` as AIC.
+
+For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
+```{r}
+summary(eme_glm.full.inter)
+```
+
+We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `inc_resp_min_qy`.
+```{r}
+plot(effect("inc_borough", eme_glm.full.inter), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
+```
+
+The lower probability of having a fast emergency is for the borough of Brooklyn, whereas the lower probability is for both Bronx and Manhattan having also a pretty big confidence interval.
+
+```{r}
+plot(effect("inc_class_group", eme_glm.full.inter), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
+```
+
+As expected we have a lower probability to have a fast emergency for the and **NonFire Emergencies** and **Medical Emergencies**. On the other hand we have the higher probability of having a fast emergency for the **Medical MFAs** even if there is a big confidence interval.
+
+
+```{r}
+plot(effect("others_units_assigned", eme_glm.full.inter), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
+```
+
+As expected the probability of having a fast emergency is higher having few others units assigned to the incident.
+
+```{r}
+plot(effect("inc_resp_min_qy", eme_glm.full.inter), rescale.axis = FALSE, 
+     ylab = "Probability of Fast Emergency")
+```
+
+As expected having a quick response time is much likely to have higher probability of fast emergency, whereas slow response means low probability of having a fast emergency.
+
+
+## Model Comparison
 
 Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
 
 ```{r}
 eme_glm.full.pred <- predict(eme_glm.full, newdata = cl_emerg_min_fd.test, 
                              type = "response")
+
+eme_glm.full.inter.pred <- predict(eme_glm.full.inter, newdata = cl_emerg_min_fd.test, 
+                             type = "response")
+
 eme_glm.clean.pred <- predict(eme_glm.clean, newdata = cl_emerg_min_fd.test, 
+                              type = "response")
+
+eme_glm.clean.inter.pred <- predict(eme_glm.clean.inter, newdata = cl_emerg_min_fd.test, 
                               type = "response")
 ```
 
@@ -734,34 +902,48 @@ eme_glm.clean.pred <- predict(eme_glm.clean, newdata = cl_emerg_min_fd.test,
 At this point we use the `pROC` library in order to extrapolate the best threshold using the function `roc`.
 
 ```{r}
-par(mfrow=c(1,2))
+par(mfrow=c(2,2))
 
 eme_glm.full.roc <- roc(
   cl_emerg_min_fd.test$fast_emergency ~ eme_glm.full.pred, plot = TRUE,
   print.auc = TRUE, main = "res_glm.full.pred ROC curve")
 
+eme_glm.full.inter.roc <- roc(
+  cl_emerg_min_fd.test$fast_emergency ~ eme_glm.full.inter.pred, plot = TRUE,
+  print.auc = TRUE, main = "res_glm.full.pred ROC curve")
+
 eme_glm.clean.roc <- roc(
   cl_emerg_min_fd.test$fast_emergency ~ eme_glm.clean.pred, plot = TRUE, 
   print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
+
+eme_glm.clean.inter.roc <- roc(
+  cl_emerg_min_fd.test$fast_emergency ~ eme_glm.clean.inter.pred, plot = TRUE, 
+  print.auc = TRUE, main = "res_glm.clean.pred ROC curve")
 ```
+
 By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
 
 Now we extract from each results the best curve measure to perform a deeper analysis.
 
 ```{r}
 eme_glm.full.roc.bmetrics <- coords(eme_glm.full.roc, x = "best", ret = "all")
+
+eme_glm.full.inter.roc.bmetrics <- coords(eme_glm.full.inter.roc, x = "best", ret = "all")
+
 eme_glm.clean.roc.bmetrics <- coords(eme_glm.clean.roc, x = "best", ret = "all")
+
+eme_glm.clean.inter.roc.bmetrics <- coords(eme_glm.clean.inter.roc, x = "best", ret = "all")
 ```
 
 Rename the single row for each dataframe and concatenate all in a single one.
 ```{r}
 row.names(eme_glm.full.roc.bmetrics) <- "Full Model"
+row.names(eme_glm.full.inter.roc.bmetrics) <- "Interaction Full Model"
 row.names(eme_glm.clean.roc.bmetrics) <- "Cleaned Model"
+row.names(eme_glm.clean.inter.roc.bmetrics) <- "Interaction Cleaned Model"
 
-eme_results <- rbind(eme_glm.full.roc.bmetrics, eme_glm.clean.roc.bmetrics)
+eme_results <- rbind(eme_glm.full.roc.bmetrics, eme_glm.full.inter.roc.bmetrics, eme_glm.clean.roc.bmetrics, eme_glm.clean.inter.roc.bmetrics)
 ```
-
-
 
 
 Now we make a comparisons result:
@@ -770,27 +952,22 @@ Now we make a comparisons result:
 ```{r}
 eme_results %>% select(specificity) %>% arrange(desc(specificity))
 ```
-In terms of specificity the best model is the **Cleaned Model**.
+In terms of specificity the best model is the **INteraction Full Model**.
 
 2) **Sensitivity**
 ```{r}
 eme_results %>% select(sensitivity) %>% arrange(desc(sensitivity))
 ```
-Regarding the sensitivity the best model is the **Full Model**.
+Regarding the sensitivity the best model is the **Cleaned Model**.
 
 3) **Accuracy**
 ```{r}
 eme_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
-And finally for the accuracy measure the best model is the **Full Model**.
+And finally for the accuracy measure the best model is the **Cleaned Model**.
 
-Howver we recall that we have an unbalanced case for the respnse, since:
+However as initially saw we have an unbalanced problem, so for the same reasons of the previous analysis we decide to opt for the  **Cleaned Model**. 
 
-```{r}
-dfSummary(cl_emerg_min_fd.test[,"fast_emergency"])
-```
-
-Like in the previous analysis exactly 3/4 of the test dataset is a fast emergency, whereas the rest has a long time taken emergency For this reason model choice should happen on the model that is able to correctly classify the response time of an incident, thus differently w.r.t the first analysis we choose the **Cleaned Model** since it has the higher accuracy and sensitivity.
 
 Let's have a quick look on the confusion matrix for the four model that we have specified.
 
@@ -800,51 +977,24 @@ table(preds=(eme_glm.full.pred > eme_glm.full.roc.bmetrics$threshold),
       true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
-2- **Cleaned Model**
+2. **Interaction Full Model**
+```{r}
+table(preds=(eme_glm.full.inter.pred > eme_glm.full.inter.roc.bmetrics$threshold), 
+      true=as.logical(cl_emerg_min_fd.test$fast_emergency))
+```
+
+3- **Cleaned Model**
 ```{r}
 table(preds=(eme_glm.clean.pred > eme_glm.clean.roc.bmetrics$threshold), 
       true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
-
-
-## Logistic Regression Model Interpretation
-
-We decide to interpret the model with the lower AIC, so the **eme_glm.full** which has ```r AIC(eme_glm.full)``` as AIC.
-
-For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
+4- **Interaction Cleaned Model**
 ```{r}
-summary(eme_glm.full)
+table(preds=(eme_glm.clean.inter.pred > eme_glm.clean.inter.roc.bmetrics$threshold), 
+      true=as.logical(cl_emerg_min_fd.test$fast_emergency))
 ```
 
-We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `inc_resp_min_qy`.
-```{r}
-plot(effect("inc_borough", eme_glm.full), rescale.axis = FALSE, 
-     ylab = "Probability of Fast Emergency")
-```
-
-The lower probability of having a fast emergency is for The Bronx but with an high confidence interval, whereas the higher is in the borough of Brooklyn and Staten Island, with the latter having a smaller interval respect to the former.
-
-```{r}
-plot(effect("inc_class_group", eme_glm.full), rescale.axis = FALSE, 
-     ylab = "Probability of Fast Emergency")
-```
-
-As expected we have a lower probability to have a fast emergency for the and **NonFire Emergencies** and **Medical Emergencies**. On the other hand we have the higher probability of having a fast emergency for the **Medical MFAs** even if there is a big confidence interval.
-
-
-```{r}
-plot(effect("others_units_assigned", eme_glm.full), rescale.axis = FALSE, 
-     ylab = "Probability of Fast Emergency")
-```
-As expected the probability of having a fast emergency is higher having few others units assigned to the incident.
-
-```{r}
-plot(effect("inc_resp_min_qy", eme_glm.full), rescale.axis = FALSE, 
-     ylab = "Probability of Fast Emergency")
-```
-
-As expected having a quick response time is much likely to have higher probability of fast emergency.
 
 
 Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
@@ -853,7 +1003,7 @@ Now we decide to Shrinkage the latter model by running  **Ridge Regression** and
 
 
 ## Ridge Shrinkage Estimation
-We decide to use the full model in order to see how ridge is able to shrinkage the coefficients.
+We decide to use the interaction full model in order to see how ridge is able to shrinkage the coefficients.
 
 First of all we have to create our model matrices.
 ```{r}
@@ -865,8 +1015,6 @@ y_train <- cl_emerg_min_fd.train$fast_emergency
 x_test <- model.matrix(formula(eme_glm.full), data = cl_emerg_min_fd.test)
 y_test <- cl_emerg_min_fd.test$fast_emergency
 ```
-
-
 
 
 
@@ -951,6 +1099,7 @@ eme_cv.lasso <- cv.glmnet(x_train, y_train, familiy="binomial", alpha = 1)
 plot(eme_cv.lasso)
 ```
 
+
 The value of $\lambda$ that minimizes the ridge cross-validated mean square error is:
 
 ```{r}
@@ -963,6 +1112,14 @@ Again like before we take as $\lambda$ value corresponding to one standard error
 eme_bestlam.lasso <- eme_cv.lasso$lambda.1se
 eme_bestlam.lasso
 ```
+
+The remaining non zero coefficient from the model obtained with the lambda taken 1se after are:
+```{r}
+eme_lasso.1se.coef <- coef(eme_fit.lasso, eme_bestlam.lasso)
+
+eme_lasso.1se.coef[eme_lasso.1se.coef[,1]!=0,]
+```
+
 Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
 
 ```{r }
@@ -1034,6 +1191,7 @@ eme_lda.roc <- roc(
   cl_emerg_min_fd.test$fast_emergency ~ eme_lda.preds$posterior[, 2],
   plot = TRUE, print.auc = TRUE)
 ```
+
 The best choice for the threshold of linear discriminant analysis yields an accuracy of:
 ```{r}
 eme_lda.roc.bmetrics <- coords(eme_lda.roc, x = "best", ret = "all")
@@ -1121,22 +1279,23 @@ eme_results
 eme_results %>% select(specificity) %>% arrange(desc(specificity))
 ```
 
-For the specificity the best model is **LDA**.
+For the specificity the best model is **Naive Bayes**.
 
 2) **Sensitivity**
 ```{r}
 eme_results %>% select(sensitivity) %>% arrange(desc(sensitivity))
 ```
 
-For sensitivity the best model is **Naive Bayes**.
+For sensitivity the best model is **Cleaned Model**.
 
 3) **Accuracy**
 ```{r}
 eme_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
+
 Finally regarding the accuracy measure the best model is again the **Cleaned Model**.
 
-In again more or less we have similar results for all the model, however differently from the previous analysis this time we choose as best overall model the Cleaned one
+In again more or less we have similar results for all the model, however differently from the previous analysis this time we choose as best overall model the **Cleaned Model**.
 
 
 
