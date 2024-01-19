@@ -13,7 +13,8 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-# REMEMBER THO CHANCGE THE WORKING DIRECTORY
+
+# REMEMBER TO CHANCGE THE WORKING DIRECTORY
 setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
 ```
 
@@ -32,7 +33,7 @@ for (req in requirements){
 
 
 
-# Linear Regression???
+# Linear Regression
 
 First things first load the cleaned train and test datasets.
 ```{r, cache=TRUE}
@@ -53,7 +54,7 @@ In this section we use `inc_resp_min_qy` as response, thus we omit `emergency_ti
 
 
 ```{r}
-# load train and test dataframes
+# load train and test datasets
 resp_min_fd.train <- fire_data_clean.train
 resp_min_fd.test <- fire_data_clean.test
 
@@ -65,8 +66,8 @@ resp_min_fd.test <- resp_min_fd.test %>% select(-c(emergency_min_qy))
 Let's build our first Linear Regression Model.
 
 ```{r}
-lm_irm_full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
-summary(lm_irm_full)
+res_lm.full <- lm(inc_resp_min_qy ~ ., data = resp_min_fd.train)
+summary(res_lm.full)
 ```
 By the summary we can see that the model $R^2$ tells us that we are able to explain around the $12.83\%$ percent of the total variability of the data and also the Adjusted R-squared which penalises the complexity of our model tells us the same story.
 
@@ -94,9 +95,9 @@ Speaking a little bit about the **p-value** we can mention that:
 
 - **inc_boroughBrooklyn, inc_boroughManhattan, inc_boroughStaten Island** have all strongly significant p-value, this indicate the difference on the mean response time for an incident having the intercept predictor values, and an incident with the same predictors except the borough being one of the respective three. All three have a decreasing effect on the mean response time.
 - Regarding the **cong_dist** only **cong_dist5** and **cong_dist12** have a strong significant p-value, both with a decreasing effect on the mean response time of an incident with the intercept characteristics except the *cong_dist* being one of the specified two.
-- Interestingly **al_source_descOthers** indicate a big decrease in the mean response time with respect to the reference level.
-- **engines_assigned** and **others_units_assigned** have a decreasing effect on the mean response time with the latter being quite reasonably significant and the former being heavily significant. On the other hand **ladders_assigned** is strongly significant but differently respect the other two units measure, its effect is to increase the mean response time of the reference level.
-- **day_typeWeekend** is significant with a decreasing effect on the mean response time for the reference level. The same discussion can be made for **working_hourTRUE**.
+- Interestingly **al_source_descOthers** indicate a big decrease in the mean response time with respect to the reference level., and is strongly significant.
+- **engines_assigned** and **others_units_assigned** have a decreasing effect on the mean response time with the latter being reasonably significant and the former being strongly significant. On the other hand **ladders_assigned** is strongly significant but differently respect the other two units measure, its effect is to increase the mean response time of the reference level.
+- **day_typeWeekend** is strongly significant with a decreasing effect on the mean response time for the reference level. The same discussion can be made for **working_hourTRUE**.
 - **time_of_dayEvening** and **tua_is_oneY** are significant with the first having a decreasing and the second having an increasing effect on the reference level.
 
 At this point we can analyse the **regression diagnostic plots**:
@@ -121,19 +122,19 @@ All these assumptions and potential problems can be checked by producing some **
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_irm_full)
+plot(res_lm.full)
 ```
 
 
-1. **Residuals vs Fitted Plot**: Used to check the linear relationship assumptions, this is proved by the straight horizontal red line at zero level. Even if, we have a higher amount of spreaded observations on the top right of the red line.
+1. **Residuals vs Fitted Plot**: Used to check the linear relationship assumptions, this is proved by the straight horizontal red line at zero level, like our case. Even if, we have a higher amount of spreaded observations on the top right of the red line.
 2. **Q-Q Residuals Plot**: in this plot also called quantile - quantile residual plot and tells us if the residuals are normally distributed or not. If they follow the dotted red line we can say so otherwise as in our case we can't say that they are normally distributed, as we will see in much detail later.
-3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessment of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, in our case we are not particularly happy.
+3. **Scaled-Location / Spread-Location plot**: tells us if the residuals are equally spread across the predictors. This is the assessment of Homoscedasticity or equal variance. And we would like to see a sort of horizontal line, in our case we are no much satisfied since we have again many observation on top the red line and there is a litte curvature.
 4. **Residuals VS Leverage plot**: helps us to identify the outliers and high leverage points with the Cook's distance, so points that have influence on the regression line. In this plot we look for data points outside of a dashed line, Cook’s distance. When the points are outside of the Cook’s distance, this means that they have high Cook’s distance scores. In our case we do not have any observations that satisfy what we have just said.
 
 Moreover we better analyse the distribution of the residuals by using the `qqPlot` from the `car` package. This will produce a better plot of the distribution of the residuals with relative confidence interval ban in blue.
 
 ```{r}
-qqPlot(residuals(lm_irm_full))
+qqPlot(residuals(res_lm.full))
 ```
 
 Much clearly the qqPlot tells that the data the residuals are not normally distributed indeed are heavily right skewed. Thus we can't trust the p-values and the estimation of the coefficients. 
@@ -141,14 +142,14 @@ Much clearly the qqPlot tells that the data the residuals are not normally distr
 For curiosity we analyse in a better and much detailed plot the presence of influential points.
 
 ```{r}
-influenceIndexPlot(lm_irm_full, vars = "Cook")
+influenceIndexPlot(res_lm.full, vars = "Cook")
 ```
 
 And as we can see thre are no points considered as influential.
 
 Here instead we have a look at all plots of residuals vs predictors and again the plot of residuals vs fitted values that we already see. 
 ```{r}
-residualPlots(lm_irm_full)
+residualPlots(res_lm.full)
 ```
 
 Both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
@@ -157,7 +158,7 @@ Both types of test statistics (residuals vs numerical predictors and Tukey test)
 Let's have a look at the possible power transformation of the response.
 
 ```{r}
-powerTransform(lm_irm_full)
+powerTransform(res_lm.full)
 ```
 
 
@@ -167,7 +168,7 @@ The function **powerTransform** suggests taking the log-transformation of the re
 But before updating the full model scaling the response by the logarithm, let's check if we have **multicollinearity**. To do so we use the `vif` function by the `car` package.
 
 ```{r}
-vif(lm_irm_full)
+vif(res_lm.full)
 ```
 We decide to use as a rule of thumb $GIF < 10$ no **strong multicollinearity** problem. Multicollinearity means that one predictor variable can be predicted by a linear combination of others predictors. This problem could cause the coefficient to be unstable and unreliable, moreover the standard errors of the regression coefficients tend to increase in the presence of multicollinearity. And higher standard errors mean wider confidence intervals and reduced precision in estimating the true values of the coefficients.
 
@@ -181,14 +182,14 @@ In our case we decide to remove the following predictors:
 Let's update our model scaling the response to the logarithm scale and remove the previously listed predictors.
 
 ```{r}
-lm_irm_full_upd <- update(lm_irm_full, log(inc_resp_min_qy) ~ . - cong_dist - inc_class_group - highest_al_level)
-vif(lm_irm_full_upd)
+res_lm.full.upd <- update(res_lm.full, log(inc_resp_min_qy) ~ . - cong_dist - inc_class_group - highest_al_level)
+vif(res_lm.full.upd)
 ```
 
 No multicollinearity problem, now we can analyse the summary of the updated model.
 
 ```{r}
-summary(lm_irm_full_upd)
+summary(res_lm.full.upd)
 ```
 
 Now remember that we can't compare the $R^2$ with the previous model since in the last one the response is on a different scale.
@@ -200,10 +201,10 @@ Now we analyse the **regression diagnostic plots** for the log response model.
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_irm_full_upd)
+plot(res_lm.full.upd)
 ```
 
-Like the previous model we can say the residuals follow a linear pattern but this time better that the previous model, even if the residuals are not randomly spreaded since they are again on the right. And it seems like the left observation the Scale - Location plot brings up the variability of residual, whereas it is constant inside the cluster. Again we do not have any influential points. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+Like the previous model we can say the residuals follow a linear pattern but this time we are in a better situation, even if the residuals are not randomly spreaded since they are again on the right. Speaking about teh Scale - Location plot it seems like the left observation brings up the variability of residual, whereas it is constant inside the cluster. Again we do not have any influential points. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
 
 1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
 2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
@@ -211,7 +212,7 @@ Like the previous model we can say the residuals follow a linear pattern but thi
 Let's clearly analyse the new qqPlot.
 
 ```{r}
-qqPlot(residuals(lm_irm_full_upd))
+qqPlot(residuals(res_lm.full.upd))
 ```
 
 So in other words this “S” shaped qqPlot with a linear portion in the middle suggests the data have more extreme values (or outliers) than the normal distribution in the tails. This indicate the following statements:
@@ -221,7 +222,7 @@ So in other words this “S” shaped qqPlot with a linear portion in the middle
 3. The p-values are usually much lower with respect to the real p-value. This means that a p-value in the order of 0.0001 could not be really significant.
 
 ```{r}
-influenceIndexPlot(lm_irm_full_upd, vars = "Cook")
+influenceIndexPlot(res_lm.full.upd, vars = "Cook")
 ```
 
 Again no influential points detected.
@@ -229,7 +230,7 @@ Again no influential points detected.
 Now we can see the residuals vs predictors and residuals vs fitted values.
 
 ```{r}
-residualPlots(lm_irm_full_upd)
+residualPlots(res_lm.full.upd)
 ```
 
 Again both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
@@ -238,22 +239,22 @@ Thus again the linear assumptions are not met, mainly by the non normal distribu
 
 
 
-At this point we have decided in any case to investigate this behaviour by trying to fix the non-normality of the residuals by modifying the scale of some predictors and adding interaction terms between them.
+At this point we have decided in any case to investigate this behaviour. So we try to fix the non-normality of the residuals by modifying the scale of some predictors.
 
-So the edits we will perform are the following one:
+The edits we will perform are the following one:
 
 - Removing the non significant predictors
 - Scaling the number of assigned units by the logarithm scale after having increased by a single units
 
 
 ```{r}
-lm_irm_full_upd_2 <- update(lm_irm_full_upd, . ~ . - others_units_assigned -
+res_lm.full.upd.2 <- update(res_lm.full.upd, . ~ . - others_units_assigned -
                               engines_assigned - ladders_assigned + 
                               log(engines_assigned + 1) +
                               log(ladders_assigned + 1) + 
                               log(others_units_assigned + 1) + 
                               log(engines_assigned + 1))
-summary(lm_irm_full_upd_2)
+summary(res_lm.full.upd.2)
 ```
 
 Now we can compare this $R^2 = 0.1576$ with the one of the previous model which is $R^2 = 0.1539$. So with the newest model we have explained $0.37\%$ much variability with respect to the initial model. Pretty poor result I would say, so the effort of changing the scale of the assigned units does not pay off. We have already tried to insert some kind of interaction terms, however the model $R^2$ results in a lower value with respect to the initial one thus we prefer the cleaned model after the multicollinearity check.
@@ -280,7 +281,7 @@ So the intercept explain the mean  logarithm response time for an incident with 
 Now we analyse the **regression diagnostic plots**.
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_irm_full_upd_2)
+plot(res_lm.full.upd.2)
 ```
 
 1. **Residuals vs Fitted plot**: here we can see that the residuals have a linear pattern, and the residuals seem pretty much randomly spreaded.
@@ -290,18 +291,18 @@ plot(lm_irm_full_upd_2)
 
 
 ```{r}
-qqPlot(residuals(lm_irm_full_upd_2))
+qqPlot(residuals(res_lm.full.upd.2))
 ```
 Unfortunately the situation is the same as the previous described one.
 
 ```{r}
-influenceIndexPlot(lm_irm_full_upd, vars = "Cook")
+influenceIndexPlot(res_lm.full.upd.2, vars = "Cook")
 ```
 
 Again no influential points detected.
 
 ```{r}
-residualPlots(lm_irm_full_upd_2)
+residualPlots(res_lm.full.upd.2)
 ```
 
 And again both types of test statistics (residuals vs numerical predictors and Tukey test) say that we can not reject the null hypothesis that there is a lack of relationship.
@@ -316,8 +317,8 @@ Let's see if in the other type response the assumptions of linearity are met or 
 Fit a linear regression model with all the predictors.
 
 ```{r}
-lm_em_full <- lm(emergency_min_qy ~ ., data = fire_data_clean.train)
-summary(lm_em_full)
+eme_lm.full <- lm(emergency_min_qy ~ ., data = fire_data_clean.train)
+summary(eme_lm.full)
 ```
 
 The first thing that comes to our eyes is the $R^2$ value which in this case is $0.3359$ thus we explain more or less 1/3 of the variability of the data. Also the Adjusted R-squared has a similar value which is $0.3349$.  
@@ -344,40 +345,44 @@ So the intercept explain the mean emergency time in minutes taken for an inciden
 
 Speaking a little bit about the **p-value** we can mention some coefficients:
 
-- **inc_boroughManhattan, inc_boroughQueens, inc_boroughStaten Island** have all significant p-value, this indicate the difference on mean emergency time taken in minutes for an incident having the intercept predictor values and an incident with the same predictor except the borough being one of the respective three. All three have a decreasing effect on the mean emergency time, respectively of $-5.72702$ minutes, $-3.05730$ minutes and $-4.41859$ minutes.
-- Regarding the **cong_dist** only **cong_dist13** has a statistically high significant p-value, it has an increased effect on the mean emergency time in minutes of an incident with the intercept characteristics except the *cong_dist*.
-- For **al_source_desc** we have all the factorial predictor highly statistically significant except **al_source_descEMS** which has a low level of p-value- Interestingly we can see that **al_index_descInitial**, **al_index_descOthers** have an high increasing decreasing effect on the mean emergency time taken of an incident with the intercept characteristics except the *al_index_desc* being on of the specified two. Respectively of $16.02968$ and $64.18114$ minutes.
-- **highest_al_levelNonFirst** has a heavy increasing effect ($60.26687$ minutes) on the mean emergency time taken with respect the reference level.
+- **inc_boroughManhattan, inc_boroughQueens, inc_boroughStaten Island** have all strongly significant p-value, this indicate the difference on mean emergency time taken in minutes for an incident having the intercept predictor values and an incident with the same predictor except the borough being one of the respective three. All three have a decreasing effect on the mean emergency time, respectively of $-5.72702$ minutes, $-3.05730$ minutes and $-4.41859$ minutes.
+- Regarding the **cong_dist** only **cong_dist13** is strongly significant, it has an increased effect on the mean emergency time in minutes of an incident with the intercept characteristics except the *cong_dist*.
+- **al_source_desc** is strongly significant except for **al_source_descEMS** which has a low level of p-value. Interestingly we can see that **al_index_descInitial Alarm** and  **al_index_descOthers** have an high increasing  effect on the mean emergency time taken of an incident with the intercept characteristics except the *al_index_desc* being on of the specified two. Respectively of $16.02968$ and $64.18114$ minutes.
+- **highest_al_levelNonFirst** has a heavy increasing effect ($60.26687$ minutes) on the mean emergency time taken with respect the reference level and is strongly significant.
+- **inc_resp_min_qy**, **engines_assigned**, **ladders_assigned** and **others_units_assigned** are all strongly significant with an increasing effect on the mean emergency time.
+- **day_type** and **working_hour** are not significant.
+- **tua_is_one** is strongly significant.
+- **time_of_day** is significant, strongly only for the Evening.
 
 Now we analyse the **regression diagnostic plots** for the log response model.
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_em_full)
+plot(eme_lm.full)
 ```
 
 1. **Residuals vs Fitted plot**: Here the fitted values vs the residual are behaving in a linear relation but they are not randomly spread since again we can view three or even more clusters.
 2. **Q-Q Residuals plot**: again we do not have the situation of normal distribution of the residuals, as we will have a closer look soon.
 3. **Scaled-Location / Spread-Location plot**: homoscedasticity is not verified since we do not have constant variance of the residuals, in fact we can see a big cluster on the left and small groups of observation spreaded in the rest of the plot.
-4. **Residuals VS Leverage plot**: we can't see any influential points.
+4. **Residuals VS Leverage plot**: we can see two points that are close to be influential, later we have a closer look on those two.
 
 
 ```{r}
-qqPlot(residuals(lm_em_full))
+qqPlot(residuals(eme_lm.full))
 ```
 
 Here we can see two heavy tails with the right much more evident respect to the left indicating that the largest observations are less than we would expect from a normal distribution.
 
 ```{r}
-influenceIndexPlot(lm_em_full, vars = "Cook")
+influenceIndexPlot(eme_lm.full, vars = "Cook")
 ```
 
-Here we have two points that are almost influential.
+As previously said, we have two points that are almost influential.
 
 Now we have a look at the possible power transformation of the response.
 
 ```{r}
-powerTransform(lm_em_full)
+powerTransform(eme_lm.full)
 ```
 
 We will try to transform the response both using the **logarithm scale** and the **power of 0.14**. in order to see if we have an improvement on the distribution of the residuals.
@@ -385,23 +390,25 @@ We will try to transform the response both using the **logarithm scale** and the
 But before updating the full model, scaling the response by logarithm, let's check if we have **multicollinearity**. To do so we use the `vif` function by the `car` package.
 
 ```{r}
-vif(lm_em_full)
+vif(eme_lm.full)
 ``` 
 
 Of course we have a similar problem as the previous analysis. We decided to remove the same predictors so `cong_dist`, and `highest_al_level`.
+
+### Power of 0.14
 
 Now we can update the initial model by using the suggested power transformation of 0.14 and remove the previously mentioned predictors.
 
 
 ```{r}
-lm_em_full_014 <- update(lm_em_full, I(emergency_min_qy ^ 0.14) ~ . - cong_dist - highest_al_level - inc_class_group)
-summary(lm_em_full_014)
+eme_lm.full.014 <- update(eme_lm.full, I(emergency_min_qy ^ 0.14) ~ . - cong_dist - highest_al_level - inc_class_group)
+summary(eme_lm.full.014)
 ```
 
 Let's see the residuals.
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_em_full_014)
+plot(eme_lm.full.014)
 ```
 
 1. **Residuals vs Fitted plot**: same situation of the previous models, here we can clearly see three distinct clusters.
@@ -410,31 +417,33 @@ plot(lm_em_full_014)
 4. **Residuals VS Leverage plot**: we can't see any influential points.
 
 ```{r}
-qqPlot(residuals(lm_em_full_014))
+qqPlot(residuals(eme_lm.full.014))
 ```
 
 In this case the two tails appear to be more homogeneous and better respect the previous models and even the previous analysis, however the final conclusion is the same, we do not have normal distribution of residuals as we can see by the qqPlot.
 
-We can try to update this last model in order, let's what we can do.
+We can try to update this last model, let's see what we can do.
 
 ```{r}
-lm_em_full_014_upd <- update(lm_em_full_014, . ~ . + log(inc_resp_min_qy) - ladders_assigned - day_type)
-summary(lm_em_full_014_upd)
+eme_lm.full.014.upd <- update(eme_lm.full, . ~ . + log(inc_resp_min_qy) - ladders_assigned - day_type)
+summary(eme_lm.full.014.upd)
 ```
 
 By logarithm scaling the `inc_resp_min_qy`  and removing non significant predictors we do not achive again great results.
 
 ```{r}
-qqPlot(residuals(lm_em_full_014_upd))
+qqPlot(residuals(eme_lm.full.014.upd))
 ```
 
 The situation on the qqPlot is the same.
 
+### Logarithm
+
 Trying the **logarithm scale** of the response.
 
 ```{r}
-lm_em_full_log <- update(lm_em_full, log(emergency_min_qy) ~ . - cong_dist - highest_al_level - inc_class_group)
-summary(lm_em_full_log)
+eme_lm.full.log <- update(eme_lm.full, log(emergency_min_qy) ~ . - cong_dist - highest_al_level - inc_class_group)
+summary(eme_lm.full.log)
 ```
 
 Remember again that we can't compare the $R^2$ between the former and the latter model since the response is not on the same scale.
@@ -443,7 +452,7 @@ View the residuals.
 
 ```{r}
 par(mfrow=c(2,2))
-plot(lm_em_full_log)
+plot(eme_lm.full.log)
 ```
 
 1. The **Residuals VS Fitted** seems pretty good since the red line follows reasonably well the 0 horizontal dotted line, indicating our residuals have a linear relation with the fitted values, however they are not randomly spreaded since we can clearly see the presence of three clusters.
@@ -453,7 +462,7 @@ plot(lm_em_full_log)
 
 
 ```{r}
-qqPlot(residuals(lm_em_full_log))
+qqPlot(residuals(eme_lm.full.log))
 ```
 
 Here the right tail is less far from the 95% confidence interval with respect to the previous model, but on the other hand the left tail is heavily skewed to the bottom of the interval. Indicating that again we do not reach the normal distribution of the residual.
@@ -462,5 +471,5 @@ In conclusion we end up in a situation where the linearity assumptions are not m
 
 Moreover we think also that a deeper consideration of the outliers should be taken into account since are those observations that bring with them many informations
 
-Please go to the **Part 3 - Classification** to continue the analysis.
+Please go to the **Part 3 - Binary Classification** to continue the analysis.
 

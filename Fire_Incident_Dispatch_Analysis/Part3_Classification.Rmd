@@ -1,5 +1,5 @@
 ---
-title: "Part 3 - Classification"
+title: "Part 3 - Binary Classification"
 author: "Zuliani Riccardo"
 date: "17/1/2024"
 output: 
@@ -13,8 +13,10 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-# REMEMBER THO CHANCGE THE WORKING DIRECTORY
+
+# REMEMBER TO CHANCGE THE WORKING DIRECTORY
 setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
+set.seed(11)
 ```
 
 # Load Libraries
@@ -34,11 +36,11 @@ for (req in requirements){
 ```
 
 
-# Cast to a ClassificationTtask
+# Cast to a Binary Classification Task
 
-As mentioned before, we decided, as the professor suggested, to cast our regression problem into a classification problem by dividing the range of possible time difference responses into 2 for a binary classification or more than 2 for a multi-classification task.
+As mentioned before, we decided, as the professor suggested, to cast our regression problem into a binary classification problem by splitting the range of possible time difference responses.
 
-We will use the same predictors of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
+We will use the same responses of the Regression Section so first `inc_resp_min_qy` and then `emergency_min_qy`. 
 
 First things first load the cleaned train and test datasets.
 ```{r, cache=TRUE}
@@ -57,7 +59,7 @@ head(fire_data_clean)
 dim(fire_data_clean)
 ```
 
-Then we have to decide the range of value for both of them.
+Then we have to decide the range of value for both of response. 
 
 ```{r}
 summary(fire_data_clean$inc_resp_min_qy)
@@ -67,7 +69,7 @@ summary(fire_data_clean$inc_resp_min_qy)
 summary(fire_data_clean$emergency_min_qy)
 ```
 
-We start by considering a classical binary classification in which the threshold used as response is the third quantile of the respective responses, thus:
+As responses threshold we decide to use the third quantile of both responses, thus:
 
 ```{r}
 # threshold for inc_resp_min_qy
@@ -121,7 +123,7 @@ print(dfSummary(cl_resp_min_fd.test$fast_response,
                 method = 'render')
 ```
 
-As expected we have an unbalanced case, since exactly 3/4 of the train and test dataset have a fast response, whereas the rest has a low response.
+As expected we have an unbalanced case, since exactly 3/4 of the train and test dataset have a fast response, whereas the rest have a low response.
 
 ## Logistic Regression
 
@@ -135,12 +137,12 @@ summary(res_glm.full)
 
 So by the summary we can say that:
 
-- **inc_borough** is strongly significant for Staten Island and Manhattan and heavily significant for Queens.
-- **cong_dist** is strongly significant for the congressional district 5 and 12, whereas it is slightly significant for 14 and 16.
+- **inc_borough** is strongly significant for Staten Island and Manhattan and significant for Queens.
+- **cong_dist** is strongly significant for the congressional districts 5 and 12, whereas it is slightly significant for 14 and 16.
 - **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**.
-- Interestingly the **inc_class_group** is strongly significant only for the structural and non structural fires.
+- Interestingly the **inc_class_group** is significant only for the structural and non structural fires, maybe because these emergency are the worse.
 - **al_source_desc** and **al_index_desc** have all categorical predictors poorly or slightly statistically significant.
-- **working_hour**,  **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant .
+- **working_hour**,  **time_of_day** and **tua_is_one** have pretty much all the categorical predictors strongly significant 
 
 
 Let's check if we have some **multicollinearity** problem using the `vif` function as we did on the previous analysis part.
@@ -149,7 +151,7 @@ Let's check if we have some **multicollinearity** problem using the `vif` functi
 vif(res_glm.full)
 ```
 
-And update the model removing the predictors that are explained with a linear combination of others predictors. We name this new model the cleaned one since it will contain only the significant predictors.
+And update the model removing the predictors that are explained with a linear combination of other predictors. We name this new model the cleaned one since it will contain only the significant predictors.
 
 ```{r}
 res_glm.clean <- update(res_glm.full, . ~ . - cong_dist - highest_al_level - inc_class_group - ladders_assigned , data = cl_resp_min_fd.train)
@@ -184,11 +186,11 @@ res_glm.clean.inter <- update(res_glm.clean, . ~ . +
 summary(res_glm.clean.inter)
 ```
 
-So we note that:
+Regarding the interaction terms that we have added we note that:
 
 - The interaction between `al_source_desc` and `engines_assigned` is strongly significant for all the cases.
-- `al_source_desc` between `others_units_assigned ` is significant for many cases but for others like.
-- `time_of_day` between `tua_is_one` is significant except for the morning category.
+- `al_source_desc` between `others_units_assigned ` is significant for many cases, but for others like **EMS** is poorly significant.
+- `time_of_day` between `tua_is_one` is significant except for the **Morning** category.
 - `day_type` between `working_hour` is strongly significant.
 
 ```{r}
@@ -211,11 +213,11 @@ summary(res_glm.full.inter)
 AIC(res_glm.full, res_glm.full.inter, res_glm.clean, res_glm.clean.inter) %>% 
   arrange(AIC)
 ```
-It seems like that the full model with the interaction terms outperform the other specified models, later we will see if this statements holds or not during predictions.
+It seems like that the full model with the interaction terms outperform the other specified models, later we will see if this statement holds or not during predictions.
 
 ### Model Interpretation
 
-We decide to interpret the model with the lower AIC, so the **res_glm.full.inter** which has ```r AIC(res_glm.full.inter)``` as AIC.
+We decide to interpret the model with the lower AIC, so the **res_glm.full.inter** which has $24415.50$ as AIC.
 
 For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
 ```{r}
@@ -228,7 +230,7 @@ plot( effect("inc_borough", res_glm.full.inter), rescale.axis = FALSE,
       ylab = "Probability of Fast Response")
 ```
 
-The lower probability of having a fast response is for The Bronx, whereas the higher are in the borough of Brooklyn and Staten Island.
+The lower probability of having a fast response is for The **Bronx**, whereas the higher are in the borough of **Brooklyn** and **Staten Island**, with the difference that the first has a smaller confidence interval respect to the second.
 
 ```{r}
 plot(effect("inc_class_group", res_glm.full.inter), rescale.axis = FALSE, 
@@ -259,12 +261,12 @@ Let's the effect from a the interaction of `time_of_day` and `tua_is_one`.
 plot(effect("time_of_day:tua_is_one", res_glm.full.inter), rescale.axis=FALSE, ylab="Probability of Fast Response")
 ```
 
-We can see that in the case of having more than a single units assigned we have an higher probability in the Evening of having a fast response, similarly n the case of having a single assigned units. Interestingly we can see that the two line plots are pretty similar, they are only vertically scaled.
+We can see that in the case of having more than a single unit assigned we have a higher probability in the Evening of having a fast response, similarly in the case of having a single assigned unit. Interestingly we can see that the two line plots are pretty similar, they are only vertically scaled.
 
 
 ## Model Comparison
 
-Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
+Now we see if what the *AIC* suggest to us is correct in practice or not by doing predictions on the test dataset.
 
 ```{r}
 res_glm.full.pred <- predict(res_glm.full, newdata = cl_resp_min_fd.test, 
@@ -306,7 +308,7 @@ res_glm.clean.inter.roc <- roc(
 
 By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
 
-Now we extract from each results the best curve measure to perform a deeper analysis.
+Now we extract from each `roc` object the best threshold in order to use it during predictions.
 
 ```{r}
 res_glm.full.roc.bmetrics <- coords(res_glm.full.roc, x = "best", ret = "all")
@@ -343,7 +345,7 @@ Now we make a comparisons result:
 ```{r}
 res_results %>% select(specificity) %>% arrange(desc(specificity))
 ```
-In terms of specificity the best model is the **Cleaned Model**.
+In terms of specificity the best model is the **Interaction Full Model**.
 
 2) **Sensitivity**
 ```{r}
@@ -357,9 +359,11 @@ res_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
 And finally for the accuracy measure the best model is the **Full Model**.
 
-However we recall that we have an unbalanced case and for this reason model choice should happen on the one that is able to correctly classify the response time of an incident, thus we choose the **Full Model** since it has the highest sensitivity and specificity is not soo bad.
+However we recall that we have an unbalanced case and for this reason model choice should happen on the one that is able to correctly classify fast response time incidents of true fast response incidents.
 
-Let's have a quick look on the confusion matrix for the four model that we have specified.
+Recalling that the sensitivity is the ratio of how many fast response emergencies we have detected that are actually fast. So since we have an unbalanced dataset with 3/4 of the observations from the train and test dataset that are fast emergencies we choose the **Full Model** since it has the highest **sensitivity** and with specificity not worse than a random choice.
+
+Let's have a quick look at the confusion matrix for the four models that we have specified.
 
 1- **Full Model**
 ```{r}
@@ -386,12 +390,12 @@ table(preds=(res_glm.clean.inter.pred > res_glm.clean.inter.roc.bmetrics$thresho
 ```
 
 
-Now we decide to Shrinkage the latter model by running  **Ridge Regression** and **Lasso Regression**.
+Now we decide to shrink the latter model by running  **Ridge Regression** and **Lasso Regression**.
 
 ## Ridge Shrinkage Estimation
-We decide to use the full model with interaction terms in order to see how ridge is able to shrinkage the coefficients.
+We decide to use the full model with interaction terms in order to see how the ridge is able to shrink the coefficients.
 
-We recall that the penalty on ridge is put in the sum of square of the coefficients thus to shrinkage the model coefficient toward zero by the parameter $\lambda$.
+We recall that the penalty on ridge is put in the sum of squares of the coefficients thus shrinking the model coefficient toward zero by the parameter $\lambda$.
 
 So first of all we have to create our model matrices.
 ```{r}
@@ -430,7 +434,7 @@ However, empirical experience suggests to select the simplest model whose $\lamb
 res_bestlam.ridge <- res_cv.ridge$lambda.1se
 res_bestlam.ridge
 ```
-Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+However, empirical experience suggests to select the simplest model whose $\lambda$ value is within one standard error from the minimum of the cross-validated mean square error:
 
 ```{r}
 plot(res_fit.ridge, xvar = "lambda")
@@ -450,7 +454,7 @@ res_fit.ridge.roc <- roc(y_test ~ res_fit.ridge.pred, plot = TRUE,
                          print.auc = TRUE) 
 ```
 
-See the results
+See the result:
 ```{r}
 res_fit.ridge.roc.bmetrics <- coords(res_fit.ridge.roc, x="best", ret="all")
 res_fit.ridge.roc.bmetrics
@@ -473,9 +477,9 @@ res_results <- rbind(res_results, res_fit.ridge.roc.bmetrics)
 
 ## Lasso Shrinkage Estimation
 
-Now is the turn of lasso and we decide to use again the full model with interaction for the same reason of ridge.
+Now is the turn of lasso and we decide to use the full model with interaction for the same reason as ridge.
 
-In Lasso instead of the sum of square of the coefficients we penalize the sum of absolute value of the coefficients.
+In Lasso instead of the sum of squares of the coefficients we penalize the sum of absolute value of the coefficients.
 
 ```{r}
 res_fit.lasso <- glmnet(x_train, y_train, familiy="binomial", alpha = 1)
@@ -500,19 +504,12 @@ Again like before we take as $\lambda$ value corresponding to one standard error
 res_bestlam.lasso <- res_cv.lasso$lambda.1se
 res_bestlam.lasso
 ```
-Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ and add a vertical line corresponding to **best.lambda**:
 
 ```{r }
 plot(res_fit.lasso, xvar = "lambda")
 abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
-```
-
-
-The remaining non zero coefficient from the model obtained with the lambda taken 1se after are:
-```{r}
-res_lasso.1se.coef <- coef(res_fit.lasso, res_bestlam.lasso)
-
-res_lasso.1se.coef[res_lasso.1se.coef[,1]!=0,]
 ```
 
 
@@ -551,13 +548,14 @@ res_results <- rbind(res_results, res_fit.lasso.roc.bmetrics)
 ## Linear Discriminant Analysis
 
 
-Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again to use the full model with interaction terms.
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again use the full model with interaction terms.
 
 
 ```{r}
 res_lda.fit <- lda(formula(res_glm.full.inter), data = cl_resp_min_fd.train)
 res_lda.fit
 ```
+
 The printed output of **lda** includes:
 
 - The a-priori probabilities of fast response
@@ -565,7 +563,7 @@ The printed output of **lda** includes:
 
 The a-priori probabilities correspond to the sample proportion of fast response of the train dataset.
 
-An example of group mean is the mean average probability that an incident happen in the borough of Brooklyn having a fast response time.
+An example of group mean is the mean fast response time of incidents in the Brooklyn borough.
 ```{r}
 with(cl_resp_min_fd.train, 
      mean(inc_borough[fast_response == TRUE] == "Brooklyn"))
@@ -620,15 +618,32 @@ res_nb.fit
 
 The output of **naiveBayes** contains:
 
-- The estimated a-priori probabilities; 
-- The estimated conditional probabilities for the qualitative variables;
+- The estimated a-priori probabilities.
+- The estimated conditional probabilities for the qualitative variables.
+- The estimated group means and standard deviations for the quantitative variables.
 
 The a-priori probabilities again correspond to the sample proportion of fast response of the train dataset.
 
-An example of group mean is the mean average probability that an incident happen in the evening having a slow response time.
+An example of conditional probabilities of `al_source_desc` for fast response time are:
+```{r}
+with(cl_resp_min_fd.train, table(al_source_desc[fast_response == TRUE]) / 
+       sum(fast_response == TRUE))
+```
+
+
+The mean and standard deviations of `engines_assigned` conditional to the response time speed are:
 ```{r}
 with(cl_resp_min_fd.train, 
-     mean(time_of_day[fast_response == FALSE] == "Evening"))
+     mean(engines_assigned[fast_response == FALSE]))
+with(cl_resp_min_fd.train, 
+     sd(engines_assigned[fast_response == FALSE]))
+```
+
+```{r}
+with(cl_resp_min_fd.train, 
+     mean(engines_assigned[fast_response == TRUE]))
+with(cl_resp_min_fd.train, 
+     sd(engines_assigned[fast_response == TRUE]))
 ```
 
 
@@ -683,7 +698,7 @@ res_results
 res_results %>% select(specificity) %>% arrange(desc(specificity))
 ```
 
-For the specificity the best model is **LDA**.
+For the specificity the best model is **Interaction Full Model**.
 
 2) **Sensitivity**
 ```{r}
@@ -696,14 +711,17 @@ For sensitivity the best model is **Naive Bayes**.
 ```{r}
 res_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
-Finally regarding the accuracy measure the best model is again the **Full Model**.
+Finally regarding the accuracy measure the best model is again the **Interaction Full Model Lasso**.
 
 
-In conclusion for this analysis we have seen that more or less all the model that we have tried have similar performance and interestingly the initial model that we have specified is the one that better solve our prediction task of trying to predict if a given incident call has a fast or low response time.
-However recalling the unbalanced problem our choice could be assigned to both:
+In conclusion, for this analysis we have seen that more or less all the models that we have tried have similar performance and interestingly the initial model that we have specified is the one that better solves our prediction task of trying to predict if a given incident call has a fast or low response time.
+However recalling the unbalanced problem our choice of the top 3 overall model is the following one:
 
-- **Full Model** since it has the highest accuracy at equal merit with the Naive Bayes, it is second overall regarding the sensitivity even if is the penultimate on specificity but it is not worse than random choice.
-- **Naive Bayes** since has the same accuracy but it has the best sensitivity and worst specificity.
+1. **Interaction Full Model Lasso**: it has the highest accuracy, is second on the sensitivity measure which is the one that we are most interested in, and it is on the 
+average ranking for specificity.
+2. **Full Model** since it has the second highest accuracy at equal merit with the Naive Bayes, it is third overall regarding the sensitivity even if it is the third ultimate on specificity but it is not worse than random choice.
+3. **Naive Bayes** since has the same accuracy of the Full Model but it has the best sensitivity and worst specificity.
+
 
 
 
@@ -767,15 +785,15 @@ summary(eme_glm.full)
 
 So by the summary we can say that:
 
-- **inc_borough** is strongly significant except for Manhattan
-- **cong_dist** is highly significant only for the congressional district 13
-- **al_source_desc** are all very strongly significant
-- **al_index_desc** is strongly significant only for the categorical value *Initial Alarm*
-- **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**
-- **inc_class_group** is strongly significant for about every categorical value
-- **inc_resp_min_qy** is strongly significant
-- Differently from the previous analysis **working_hour** is not significant
-- **time_of_day** and **tua_is_one** have pretty all the categorical predictors strongly significant 
+- **inc_borough** is strongly significant except for Manhattan.
+- **cong_dist** is significant only for the congressional district 13.
+- **al_source_desc** are all very strongly significant.
+- **al_index_desc** is strongly significant only for the categorical value *Initial Alarm*.
+- **engined_assigned** and **others_units_assigned** are strongly significant but not **ladders_assigned**.
+- **inc_class_group** is strongly significant for about every categorical value.
+- **inc_resp_min_qy** is strongly significant.
+- Differently from the previous analysis **working_hour** is not significant.
+- **time_of_day** and **tua_is_one** are strongly significant.
 
 
 Let's check if we have some **multicollinearity** problem using the `vif` function as we did on the previous analysis part.
@@ -784,7 +802,7 @@ Let's check if we have some **multicollinearity** problem using the `vif` functi
 vif(eme_glm.full)
 ```
 
-Now we remove already the non significant predictor building as before the cleaned model.
+Now we remove the non significant predictor building as before the cleaned model.
 
 ```{r}
 eme_glm.clean <- update(eme_glm.full, . ~ . - cong_dist - highest_al_level - 
@@ -802,6 +820,7 @@ Compare the **AIC** for the two models.
 AIC(eme_glm.full, eme_glm.clean) %>% arrange(AIC)
 ```
 
+The cleaned model appears to have a higher AIC thus up to now we prefer the full initial model.
 
 Now we decide to update the previous model by adding an interaction term for each type of assigned units with the alarm source description.
 
@@ -836,40 +855,40 @@ summary(eme_glm.full.inter)
 AIC(eme_glm.full, eme_glm.full.inter, eme_glm.clean, eme_glm.clean.inter) %>% arrange(AIC)
 ```
 
-And it seems like that the full model with the interactionit is just slightly better respect to the full model without interaction terms.
+And it seems like that the full model with the interaction is just slightly better with respect to the full model without interaction terms.
 
 
 ## Model Interpretation
 
-We decide to interpret the model with the lower AIC, so the **eme_glm.full.inter** which has ```r AIC(eme_glm.full.inter)``` as AIC.
+We decide to interpret the model with the lower AIC, so the **eme_glm.full.inter** which has $24167.10$ as AIC.
 
 For interpreting the specified model we decide to use the library `effect`. Let's recall the summary of the model, and see the effects of some strongly significant predictors.
 ```{r}
 summary(eme_glm.full.inter)
 ```
 
-We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `others_units_assigned`, and `inc_resp_min_qy`.
+We analyse the effects of the following predictors: `inc_borough`, `inc_class_group`, `al_source_desc`, and `inc_resp_min_qy`.
 ```{r}
 plot(effect("inc_borough", eme_glm.full.inter), rescale.axis = FALSE, 
      ylab = "Probability of Fast Emergency")
 ```
 
-The lower probability of having a fast emergency is for the borough of Brooklyn, whereas the lower probability is for both Bronx and Manhattan having also a pretty big confidence interval.
+The higher probability of having a fast emergency is for the borough of **Brooklyn**, whereas the lower probability is for both **Bronx** and **Manhattan** having also a pretty big confidence interval.
 
 ```{r}
 plot(effect("inc_class_group", eme_glm.full.inter), rescale.axis = FALSE, 
      ylab = "Probability of Fast Emergency")
 ```
 
-As expected we have a lower probability to have a fast emergency for the and **NonFire Emergencies** and **Medical Emergencies**. On the other hand we have the higher probability of having a fast emergency for the **Medical MFAs** even if there is a big confidence interval.
+As expected we have a lower probability to have a fast emergency for the and **NonFire Emergencies** and **Medical Emergencies**. On the other hand we have a higher probability of having a fast emergency for the **Medical MFAs** even if there is a big confidence interval.
 
 
 ```{r}
-plot(effect("others_units_assigned", eme_glm.full.inter), rescale.axis = FALSE, 
+plot(effect("al_source_desc", eme_glm.full.inter), rescale.axis = FALSE, 
      ylab = "Probability of Fast Emergency")
 ```
 
-As expected the probability of having a fast emergency is higher having few others units assigned to the incident.
+We have the highest probability of having a fast emergency for the category **CLASS-3** with small confidence interval, whereas the lowest is from the **Others**.
 
 ```{r}
 plot(effect("inc_resp_min_qy", eme_glm.full.inter), rescale.axis = FALSE, 
@@ -881,7 +900,7 @@ As expected having a quick response time is much likely to have higher probabili
 
 ## Model Comparison
 
-Now we see if what the *AIC* suggest to us is correct in practise or not by doing prediction on the test dataset.
+Now we see if what the *AIC* suggest to us is correct in practice or not by doing predictions on the test dataset.
 
 ```{r}
 eme_glm.full.pred <- predict(eme_glm.full, newdata = cl_emerg_min_fd.test, 
@@ -923,7 +942,7 @@ eme_glm.clean.inter.roc <- roc(
 
 By the plots we can see that the Area Under the Curve (AUC) computed by the ROC curves gives almost the same results.
 
-Now we extract from each results the best curve measure to perform a deeper analysis.
+Now we extract from each `roc` object the best threshold in order to use it during predictions.
 
 ```{r}
 eme_glm.full.roc.bmetrics <- coords(eme_glm.full.roc, x = "best", ret = "all")
@@ -952,7 +971,7 @@ Now we make a comparisons result:
 ```{r}
 eme_results %>% select(specificity) %>% arrange(desc(specificity))
 ```
-In terms of specificity the best model is the **INteraction Full Model**.
+In terms of specificity the best model is the **Interaction Full Model**.
 
 2) **Sensitivity**
 ```{r}
@@ -966,7 +985,7 @@ eme_results %>% select(accuracy) %>% arrange(desc(accuracy))
 ```
 And finally for the accuracy measure the best model is the **Cleaned Model**.
 
-However as initially saw we have an unbalanced problem, so for the same reasons of the previous analysis we decide to opt for the  **Cleaned Model**. 
+However as initially saw we have an unbalanced problem, so for the same reasons of the previous analysis we decide to opt for the **Cleaned Model**. 
 
 
 Let's have a quick look on the confusion matrix for the four model that we have specified.
@@ -1008,11 +1027,11 @@ We decide to use the interaction full model in order to see how ridge is able to
 First of all we have to create our model matrices.
 ```{r}
 # model matrix for train
-x_train <- model.matrix(formula(eme_glm.full), data = cl_emerg_min_fd.train)
+x_train <- model.matrix(formula(eme_glm.full.inter), data = cl_emerg_min_fd.train)
 y_train <- cl_emerg_min_fd.train$fast_emergency
 
 # mode matrix for test
-x_test <- model.matrix(formula(eme_glm.full), data = cl_emerg_min_fd.test)
+x_test <- model.matrix(formula(eme_glm.full.inter), data = cl_emerg_min_fd.test)
 y_test <- cl_emerg_min_fd.test$fast_emergency
 ```
 
@@ -1043,7 +1062,7 @@ However, empirical experience suggests to select the simplest model whose $\lamb
 eme_bestlam.ridge <- eme_cv.ridge$lambda.1se
 eme_bestlam.ridge
 ```
-Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+Now visualize again the ridge estimates as a function of the logarithm of $\lambda$ and add a vertical line corresponding to **best.lambda**:
 
 ```{r}
 plot(eme_fit.ridge, xvar = "lambda")
@@ -1063,7 +1082,7 @@ eme_fit.ridge.roc <- roc(y_test ~ eme_fit.ridge.pred, plot = TRUE,
                          print.auc = TRUE) 
 ```
 
-See the results
+See the result:
 ```{r}
 eme_fit.ridge.roc.bmetrics <- coords(eme_fit.ridge.roc, x="best", ret="all")
 eme_fit.ridge.roc.bmetrics
@@ -1113,14 +1132,8 @@ eme_bestlam.lasso <- eme_cv.lasso$lambda.1se
 eme_bestlam.lasso
 ```
 
-The remaining non zero coefficient from the model obtained with the lambda taken 1se after are:
-```{r}
-eme_lasso.1se.coef <- coef(eme_fit.lasso, eme_bestlam.lasso)
 
-eme_lasso.1se.coef[eme_lasso.1se.coef[,1]!=0,]
-```
-
-Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ using option **xvar = "lambda"** and add a vertical line corresponding to **best.lambda**:
+Like before, now visualize again the lasso estimates as a function of the logarithm of $\lambda$ and add a vertical line corresponding to **best.lambda**:
 
 ```{r }
 plot(eme_fit.lasso, xvar = "lambda")
@@ -1163,19 +1176,21 @@ eme_results <- rbind(eme_results, eme_fit.lasso.roc.bmetrics)
 ## Linear Discriminant Analysis
 
 
-Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again to use the full model.
+Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again to use the interaction full model.
 
 
 ```{r}
-eme_lda.fit <- lda(formula(eme_glm.full), data = cl_emerg_min_fd.train)
+eme_lda.fit <- lda(formula(eme_glm.full.inter), data = cl_emerg_min_fd.train)
 eme_lda.fit
 ```
 
 
-An example of group mean is the mean average response time in minutes of an incident that having a fast emergency.
+An example of group mean is the mean engines assigned to slow emergencies.
 ```{r}
-with(cl_emerg_min_fd.train, mean(inc_resp_min_qy[fast_emergency == TRUE]))
+with(cl_emerg_min_fd.train, 
+     mean(engines_assigned[fast_emergency == FALSE]))
 ```
+
 
 
 Now we make the prediction on the test set.
@@ -1225,15 +1240,34 @@ eme_nb.fit <- naiveBayes(formula(eme_glm.full), data = cl_emerg_min_fd.train)
 eme_nb.fit
 ```
 
-An example of group mean is the mean probability that an incident have a single unit assigned being a fast emergency.
+
+An example of conditional probabilities of `al_index_desc` for slow response time are:
 ```{r}
-with(cl_emerg_min_fd.train, mean(tua_is_one[fast_emergency == TRUE] == TRUE))
+with(cl_emerg_min_fd.train, table(al_index_desc[fast_emergency == FALSE]) / 
+       sum(fast_emergency == FALSE))
 ```
+
+
+The mean and standard deviations of `inc_resp_min_qy` conditional to the emergency time taken are:
+```{r}
+with(cl_emerg_min_fd.train, 
+     mean(inc_resp_min_qy[fast_emergency == FALSE]))
+with(cl_emerg_min_fd.train, 
+     sd(inc_resp_min_qy[fast_emergency == FALSE]))
+```
+
+```{r}
+with(cl_emerg_min_fd.train, 
+     mean(inc_resp_min_qy[fast_emergency == TRUE]))
+with(cl_emerg_min_fd.train, 
+     sd(inc_resp_min_qy[fast_emergency == TRUE]))
+```
+
+
 
 Prediction for the test set:
 ```{r}
 eme_nb.preds <- predict(eme_nb.fit, newdata = cl_emerg_min_fd.test)
-table(preds = eme_nb.preds, true = cl_emerg_min_fd.test$fast_emergency)
 ```
 
 Predicted class probabilities can be obtained using the argument **type = "raw"**:
@@ -1295,7 +1329,11 @@ eme_results %>% select(accuracy) %>% arrange(desc(accuracy))
 
 Finally regarding the accuracy measure the best model is again the **Cleaned Model**.
 
-In again more or less we have similar results for all the model, however differently from the previous analysis this time we choose as best overall model the **Cleaned Model**.
+In conclusion we say that the best model for this analysis is the **Cleaned Model**, so what we have discussed previously remains true. To recall we opt for this model since we are again in an unbalanced case regarding the response, thus we have to prefer a model that is able to correctly predict fast emergencies being those emergencies actually fast (so high sensitivity). But of course maintaining an eye on the specificity measure.
+
+# Special Thanks 
+If you are arrived up here, I would like to thank you for your time, I hope that the analysis were interesting to read.
+
 
 
 

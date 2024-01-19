@@ -14,7 +14,7 @@ editor_options:
 ```{r setup, include=FALSE}
 #knitr::opts_chunk$set(echo = TRUE) #, cache=TRUE
 
-# REMEMBER THO CHANCGE THE WORKING DIRECTORY
+# REMEMBER TO CHANCGE THE WORKING DIRECTORY
 setwd("C:/Users/ricca/Desktop/UNI/Magistrale/Anno3/Statistical_Inference_and_Learning/SIL Projcet/Statistical_Inference_Learning_Project/Fire_Incident_Dispatch_Analysis")
 ```
 
@@ -1250,7 +1250,7 @@ count_inc_brough <- merge(count_inc_brough, stations_borough, by="borough")
 count_inc_brough
 ```
 
-Now we convert the `firefighter_station` data frame into a **Spartial Data Frame** to contain the geometry points.
+Now we convert the `firefighter_station` dataframe into a **Spartial Dataframe** to contain the geometry points.
 
 ```{r firefighter_stations_sdf}
 firefighter_stations_sdf <- st_as_sf(firefighter_stations, 
@@ -1283,7 +1283,7 @@ geoj_nyc_cdist$cong_dist <- as.factor(geoj_nyc_cdist$cong_dist)
 head(geoj_nyc_cdist)
 ```
 
-And now we merge `geoj_nyc_borough` with `count_inc_brough` maintaining the **Spartial Data Frame** type.
+And now we merge `geoj_nyc_borough` with `count_inc_brough` maintaining the **Spartial Dataframe** type.
 
 ```{r}
 geoj_nyc_borough@data = data.frame(geoj_nyc_borough@data, 
@@ -1293,7 +1293,7 @@ geoj_nyc_borough@data = data.frame(geoj_nyc_borough@data,
 geoj_nyc_borough@data$borough.1 <- NULL # remove the added column
 ```
 
-Here we are making the same step as before but this with the `geoj_nyc_cdist` merging via `cong_dist`, again maintaining the **Spartial Data Frame** type.
+Here we are making the same step as before but this with the `geoj_nyc_cdist` merging via `cong_dist`, again maintaining the **Spartial Dataframe** type.
 
 ```{r}
 geoj_nyc_cdist@data = data.frame(geoj_nyc_cdist@data, count_inc_cdist[match(geoj_nyc_cdist@data$cong_dist, count_inc_cdist$cong_dist),])
