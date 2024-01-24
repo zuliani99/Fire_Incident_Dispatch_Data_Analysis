@@ -204,10 +204,10 @@ par(mfrow=c(2,2))
 plot(res_lm.full.upd)
 ```
 
-Like the previous model we can say the residuals follow a linear pattern but this time we are in a better situation, even if the residuals are not randomly spreaded since they are again on the right. Speaking about teh Scale - Location plot it seems like the left observation brings up the variability of residual, whereas it is constant inside the cluster. Again we do not have any outliers and high leverage points, later we will analyse the presence or not of influential points. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+Like the previous model we can say the residuals follow a linear pattern but this time we are in a better situation, even if the residuals are not randomly spreaded since they are again on the right. Speaking about teh Scale - Location plot it seems like the left observation brings up the variability of residual, whereas it is constant inside the cluster. Again we do not have any outliers and high leverage points, later we will analyse the presence or not of influential points. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed. By this qqPlot we can say that we are in a situation of **Over-dispersed data**, this means that:
 
-1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
-2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
+1. The smallest observations are smaller than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been extended, relative to a normal distribution.
+2. The largest observations are larger than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been extended, relative to a normal distribution.
 
 Let's clearly analyse the new qqPlot.
 
