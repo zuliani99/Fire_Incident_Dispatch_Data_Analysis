@@ -550,6 +550,8 @@ res_results <- rbind(res_results, res_fit.lasso.roc.bmetrics)
 
 Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again use the full model with interaction terms.
 
+LDA assumes that the data is normally distributed which is no our case, however we have decided to estimate its performance in any case.
+
 
 ```{r}
 res_lda.fit <- lda(formula(res_glm.full.inter), data = cl_resp_min_fd.train)
@@ -610,6 +612,8 @@ res_results <- rbind(res_results, res_lda.roc.bmetrics)
 ## Naive Baye
 
 Continuing with the analysis we try **Naive Bayes** algorithm. In this case we can't use a model with interaction term since Naive Bayes do not support these relations. Thus we decide to use the **Full Model**.
+
+Note that Naive Bayes assumes that all predictors are independent to each other.
 
 ```{r}
 res_nb.fit <- naiveBayes(formula(res_glm.full), data = cl_resp_min_fd.train)
@@ -1179,6 +1183,8 @@ eme_results <- rbind(eme_results, eme_fit.lasso.roc.bmetrics)
 
 Now we are going to deal with **LDA** or **Linear Discriminant Analysis**. For this type of Generative Model we decide to again to use the interaction full model.
 
+LDA assumes that the data is normally distributed which is no our case, however we have decided to estimate its performance in any case.
+
 
 ```{r}
 eme_lda.fit <- lda(formula(eme_glm.full.inter), data = cl_emerg_min_fd.train)
@@ -1235,6 +1241,8 @@ eme_results <- rbind(eme_results, eme_lda.roc.bmetrics)
 ## Naive Baye
 
 Continuing with the analysis we try **Naive Bayes** algorithm. In this case we can't use a model with interaction term since Naive Bayes do not support these relations. Thus we decide to use the **Full Model**.
+
+Note that Naive Bayes assumes all predictors being independent to each other.
 
 ```{r}
 eme_nb.fit <- naiveBayes(formula(eme_glm.full), data = cl_emerg_min_fd.train)
