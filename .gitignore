@@ -5,6 +5,7 @@
 *.rdb
 *.rdx
 *.__packages
-Fire_Incident_Dispatch_Analysis/Part3_Classification_cache/html/__packages
 Fire_Incident_Dispatch_Analysis/Part1_DatasetAnalysisCleaning_cache/html/__packages
 Fire_Incident_Dispatch_Analysis/Part2_Linear_Regression_cache/html/__packages
+Fire_Incident_Dispatch_Analysis/Part3_Binary_Classification_cache/html/__packages
+Fire_Incident_Dispatch_Analysis/Part3_Classification_cache/html/__packages

@@ -204,7 +204,7 @@ par(mfrow=c(2,2))
 plot(res_lm.full.upd)
 ```
 
-Like the previous model we can say the residuals follow a linear pattern but this time we are in a better situation, even if the residuals are not randomly spreaded since they are again on the right. Speaking about teh Scale - Location plot it seems like the left observation brings up the variability of residual, whereas it is constant inside the cluster. Again we do not have any influential points. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
+Like the previous model we can say the residuals follow a linear pattern but this time we are in a better situation, even if the residuals are not randomly spreaded since they are again on the right. Speaking about teh Scale - Location plot it seems like the left observation brings up the variability of residual, whereas it is constant inside the cluster. Again we do not have any outliers and high leverage points, later we will analyse the presence or not of influential points. But on the other hand the qqPlot is pretty much a mess indicating that the residuals are not normally distributed, by this qqPlot we can say that:
 
 1. The smallest observations are larger than you would expect from a normal distribution (i.e. the points are above the line on the QQ-plot). This means the lower tail of the data’s distribution has been reduced, relative to a normal distribution.
 2. The largest observations are less than you would expect from a normal distribution (i.e. the points are below the line on the QQ-plot). This means the upper tail of the data’s distribution has been reduced, relative to a normal distribution.
@@ -287,7 +287,7 @@ plot(res_lm.full.upd.2)
 1. **Residuals vs Fitted plot**: here we can see that the residuals have a linear pattern, and the residuals seem pretty much randomly spreaded.
 2. **Q-Q Residuals plot**: again we do not have the situation of normal distribution of the residuals, as we will have a closer look soon.
 3. **Scaled-Location / Spread-Location plot**: homoscedasticity is quite reached even if we have a light curvature.
-4. **Residuals VS Leverage plot**: we can't see any influential points.
+4. **Residuals VS Leverage plot**: we can't see any outliers and high leverage points.
 
 
 ```{r}
@@ -364,7 +364,7 @@ plot(eme_lm.full)
 1. **Residuals vs Fitted plot**: Here the fitted values vs the residual are behaving in a linear relation but they are not randomly spread since again we can view three or even more clusters.
 2. **Q-Q Residuals plot**: again we do not have the situation of normal distribution of the residuals, as we will have a closer look soon.
 3. **Scaled-Location / Spread-Location plot**: homoscedasticity is not verified since we do not have constant variance of the residuals, in fact we can see a big cluster on the left and small groups of observation spreaded in the rest of the plot.
-4. **Residuals VS Leverage plot**: we can see two points that are close to be influential, later we have a closer look on those two.
+4. **Residuals VS Leverage plot**: we can see two points that are close to be influential and high leverage, later we have a closer look on those two.
 
 
 ```{r}
@@ -414,7 +414,7 @@ plot(eme_lm.full.014)
 1. **Residuals vs Fitted plot**: same situation of the previous models, here we can clearly see three distinct clusters.
 2. **Q-Q Residuals plot**: is the best situation that we ever see in this analysis, later we have a closer and much more detailed look.
 3. **Scaled-Location / Spread-Location plot**: homoscedasticity is not verified since we do not have constant variance of the residuals, in fact we can see a big cluster on the left and small groups of observation spreaded in the rest of the plot.
-4. **Residuals VS Leverage plot**: we can't see any influential points.
+4. **Residuals VS Leverage plot**: we can't see any hogh leverage points.
 
 ```{r}
 qqPlot(residuals(eme_lm.full.014))
@@ -458,7 +458,7 @@ plot(eme_lm.full.log)
 1. The **Residuals VS Fitted** seems pretty good since the red line follows reasonably well the 0 horizontal dotted line, indicating our residuals have a linear relation with the fitted values, however they are not randomly spreaded since we can clearly see the presence of three clusters.
 2. The **Q-Q Plots** again tells us that we are not in a situation of normally distributed residuals since we have the two tails that go outside the 95% confidence interval.
 3. In the **Scale - Location Plots** homoscedasticity is not particularly satisfied since we have two main clusters and we have a decreasing trend.
-4. In the **Residuals VS Leverage Plots** we can see that there are not any influential points that we have to process and investigate.
+4. In the **Residuals VS Leverage Plots** we can see that there are not any high leverage points that we have to process and investigate.
 
 
 ```{r}

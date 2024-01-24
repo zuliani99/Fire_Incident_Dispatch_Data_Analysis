@@ -215,7 +215,7 @@ AIC(res_glm.full, res_glm.full.inter, res_glm.clean, res_glm.clean.inter) %>%
 ```
 It seems like that the full model with the interaction terms outperform the other specified models, later we will see if this statement holds or not during predictions.
 
-### Model Interpretation
+## Model Interpretation
 
 We decide to interpret the model with the lower AIC, so the **res_glm.full.inter** which has $24415.50$ as AIC.
 
@@ -583,6 +583,7 @@ res_lda.roc <- roc(
   cl_resp_min_fd.test$fast_response ~ res_lda.preds$posterior[, 2], 
   plot = TRUE, print.auc = TRUE)
 ```
+
 The best choice for the threshold of linear discriminant analysis yields an accuracy of:
 ```{r}
 res_lda.roc.bmetrics <- coords(res_lda.roc, x = "best", ret = "all")
