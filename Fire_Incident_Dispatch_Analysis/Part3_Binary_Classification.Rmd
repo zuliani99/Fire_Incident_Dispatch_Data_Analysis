@@ -441,6 +441,12 @@ plot(res_fit.ridge, xvar = "lambda")
 abline(v = log(res_bestlam.ridge), lwd = 1.2, lty = "dashed")
 ```
 
+These are the coefficients:
+```{r}
+coef(res_fit.ridge,  s=res_bestlam.ridge)
+```
+
+
 We make the prediction on the test set.
 
 ```{r}
@@ -511,6 +517,14 @@ Like before, now visualize again the lasso estimates as a function of the logari
 plot(res_fit.lasso, xvar = "lambda")
 abline(v = log(res_bestlam.lasso), lwd = 1.2, lty = "dashed")
 ```
+
+These are the coefficients:
+```{r}
+res_bestlam.lasso.coef <- coef(res_fit.lasso,  s=res_bestlam.lasso)
+
+res_bestlam.lasso.coef[res_bestlam.lasso.coef[,1]!=0,]
+```
+
 
 
 Now we apply prediction on the test set.
@@ -1074,6 +1088,12 @@ plot(eme_fit.ridge, xvar = "lambda")
 abline(v = log(eme_bestlam.ridge), lwd = 1.2, lty = "dashed")
 ```
 
+
+These are the coefficients:
+```{r}
+coef(eme_fit.ridge,  s=eme_bestlam.ridge)
+```
+
 We make the prediction on the test set.
 
 ```{r}
@@ -1143,6 +1163,13 @@ Like before, now visualize again the lasso estimates as a function of the logari
 ```{r }
 plot(eme_fit.lasso, xvar = "lambda")
 abline(v = log(eme_bestlam.lasso), lwd = 1.2, lty = "dashed")
+```
+
+These are the coefficients:
+```{r}
+eme_bestlam.lasso.coef <- coef(eme_fit.lasso,  s=eme_bestlam.lasso)
+
+eme_bestlam.lasso.coef[eme_bestlam.lasso.coef[,1]!=0,]
 ```
 
 
